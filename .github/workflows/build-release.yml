@@ -1,0 +1,76 @@
+name: Build and release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Install .NET 4.0 reference assemblies
+        shell: pwsh
+        run: |
+          nuget install Microsoft.NETFramework.ReferenceAssemblies.net40 -Version 1.0.3 -OutputDirectory bin/dependencies -NonInteractive -Source https://api.nuget.org/v3/index.json
+          if ($LASTEXITCODE -ne 0) { throw 'Reference assembly installation failed.' }
+      - name: Build and test
+        shell: pwsh
+        run: ./build.ps1 -RunTests -ReferencePath "$PWD/bin/dependencies/Microsoft.NETFramework.ReferenceAssemblies.net40.1.0.3/build/.NETFramework/v4.0"
+      - name: Check version and package
+        shell: pwsh
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if ($env:BASE_REF) { ./tools/package.ps1 -BaseRef "origin/$env:BASE_REF" }
+          else { ./tools/package.ps1 }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: dist
+      - name: Publish version once
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $meta = Get-Content dist/release.json -Raw | ConvertFrom-Json
+          if ($meta.dirty -or $meta.commit -ne $env:GITHUB_SHA) { throw 'Artifact commit mismatch or dirty build.' }
+          $tag = 'v' + $meta.version
+          $existing = gh release list --limit 100 --json tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot check existing releases.' }
+          if (@($existing | Where-Object tagName -eq $tag).Count -gt 0) {
+            Write-Host "$tag already published; keeping existing release unchanged."
+            exit 0
+          }
+          $assets = @(Get-ChildItem dist -File | Where-Object { $_.Extension -in '.zip','.exe' -or $_.Name -in 'SHA256SUMS.txt','release.json' } | ForEach-Object FullName)
+          gh release create $tag @assets --target $env:GITHUB_SHA --title "Nihongo Desk Memo $tag" --notes-file dist/release-notes.md --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed.' }

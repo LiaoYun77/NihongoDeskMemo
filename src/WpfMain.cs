@@ -69,7 +69,7 @@ namespace NihongoDeskMemoWpf
             database = NihongoDeskMemo.Storage.LoadDatabase();
             config = NihongoDeskMemo.Storage.LoadConfig();
 
-            Title = "Nihongo Desk Memo";
+            Title = "Nihongo Desk Memo v" + AppVersion.Number;
             Width = Math.Max(300, config.WindowWidth);
             Height = Math.Max(250, config.WindowHeight);
             MinWidth = 280;
@@ -402,7 +402,7 @@ namespace NihongoDeskMemoWpf
             answerVisible = !config.HideMeaningUntilClick;
             ApplyReviewDisplay();
             statusText.Text = ModeName() + "  ·  " +
-                (config.PracticeUnit.Length == 0 ? "全部词库" : config.PracticeUnit) +
+                PracticeScope.Summary(config) +
                 "  ·  复习 " + currentWord.ReviewCount.ToString();
             UpdateAnswerState();
         }
@@ -416,7 +416,7 @@ namespace NihongoDeskMemoWpf
             answerLine2.Text = string.Empty;
             answerPanel.Visibility = Visibility.Visible;
             ratingGrid.Visibility = Visibility.Collapsed;
-            statusText.Text = config.PracticeUnit.Length == 0 ? "全部词库" : config.PracticeUnit;
+            statusText.Text = PracticeScope.Summary(config);
         }
 
         private void ApplyReviewDisplay()
@@ -492,8 +492,7 @@ namespace NihongoDeskMemoWpf
 
         private bool InPracticeUnit(NihongoDeskMemo.WordItem item)
         {
-            return config.PracticeUnit.Length == 0 ||
-                string.Equals(NihongoDeskMemo.Storage.SafeTrim(item.Unit), config.PracticeUnit, StringComparison.OrdinalIgnoreCase);
+            return PracticeScope.Contains(config, item.Unit);
         }
 
         private bool EligibleForMode(NihongoDeskMemo.WordItem item)

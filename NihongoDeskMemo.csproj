@@ -41,6 +41,9 @@
     <Compile Include="src\WpfDialogs.cs" />
     <Compile Include="src\GlobalHideHotkey.cs" />
     <Compile Include="src\StructuredWordImporter.cs" />
+    <Compile Include="src\PracticeScope.cs" />
+    <Compile Include="src\UnitSelectionControl.cs" />
+    <Compile Include="src\VersionInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

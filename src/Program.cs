@@ -76,6 +76,7 @@ namespace NihongoDeskMemo
         public bool HideMeaningUntilClick { get; set; }
         public bool ShowRatingButtons { get; set; }
         public string PracticeUnit { get; set; }
+        public string[] PracticeUnits { get; set; }
         public int ReviewMode { get; set; }
         public int WindowX { get; set; }
         public int WindowY { get; set; }
