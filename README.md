@@ -5,6 +5,7 @@ C# / WPF 日语单词桌面悬浮工具。支持纯文字透明显示、单元�
 ## 功能
 
 - 导入 TXT / CSV 词表，支持日语单词、50 音假名读音、中文意思。
+- 支持完整 XML 词库：保留单元、来源编号及原文；不同课的同形词不会互相覆盖。重复导入按来源编号跳过，保留已有编辑和复习进度；导入前自动备份到 exe 同目录的 `backups`。
 - 词库搜索、新增、修改、删除，以及多选词条批量划分单元。
 - 按全部词库或指定单元抽题；可设置自动换词间隔。
 - 四种方向：日语认中文、中文回忆日语、假名回忆汉字、汉字回忆读音。
@@ -56,6 +57,16 @@ F10 被其他程序占用时改用 Ctrl+Alt+F10，并弹窗提示。两个快捷
 
 兼容两列“日语单词、中文意思”，并支持 Tab 等分隔符。导入后可在词库中多选词条，批量划分单元，再到设置中选择练习范围。
 
+完整 XML 词库通过“设置 → 导入词表”选取，根节点为 `WordDatabase`，`Words/WordItem` 包含 `Japanese`、`Pinyin`、`Chinese`、`Unit`、`SourceId`、`SourceText`。每条词条的 `SourceId` 必须非空且唯一。此格式用于保留重复词、跨课词条与来源原文，不要把个人 `words.xml` 当作可替换整个数据库的导入文件。原文缺少释义的项目应明确标注，不应自行猜测。
+
+`tools/convert_vocabulary.py` 是针对本次标日 1–48 课文档的转换工具，使用 Python 3.9+ 标准库，保留原文及来源段落核对记录；不是通用 DOCX 排版识别器。教材原文和生成的词库不纳入仓库。
+
+```powershell
+python tools/convert_vocabulary.py "输入文档.docx" "输出目录"
+# 编译测试后，额外核对这份完整教材的实际导入及存储往返：
+.\bin\Tests\ImportTests.exe "输出目录\标日1-48课-完整词库.xml"
+```
+
 ## 测试
 
 ```powershell
@@ -76,6 +87,7 @@ src/
   WpfMain.cs          WPF 程序入口、主窗口和复习逻辑
   WpfDialogs.cs       WPF 设置与词库管理
   GlobalHideHotkey.cs Windows 全局热键与窗口恢复
+  StructuredWordImporter.cs 完整 XML 词库校验与无覆盖合并
 tests/                功能回归与桌面集成测试
 examples/             最小导入示例
 NihongoDeskMemo.csproj Visual Studio / MSBuild 项目

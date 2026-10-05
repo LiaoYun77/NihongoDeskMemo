@@ -26,6 +26,8 @@ namespace NihongoDeskMemo
         public string Pinyin { get; set; }
         public string Chinese { get; set; }
         public string Unit { get; set; }
+        public string SourceId { get; set; }
+        public string SourceText { get; set; }
         public int Weight { get; set; }
         public bool Marked { get; set; }
         public int SeenCount { get; set; }
@@ -44,6 +46,8 @@ namespace NihongoDeskMemo
             Pinyin = string.Empty;
             Chinese = string.Empty;
             Unit = string.Empty;
+            SourceId = string.Empty;
+            SourceText = string.Empty;
             Weight = 1;
             LastSeenUtc = string.Empty;
             LastReviewTime = string.Empty;
@@ -156,6 +160,17 @@ namespace NihongoDeskMemo
             EnsureDirectory();
             NormalizeDatabase(database);
             SaveXml(DatabasePath, database);
+        }
+
+        public static string BackupDatabase()
+        {
+            if (!File.Exists(DatabasePath)) return string.Empty;
+            string directory = Path.Combine(AppDirectory, "backups");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, "words-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") +
+                "-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".xml");
+            File.Copy(DatabasePath, path, false);
+            return path;
         }
 
         public static void SaveConfig(AppConfig config)
@@ -2249,6 +2264,7 @@ namespace NihongoDeskMemo
         public int Added;
         public int Updated;
         public int Skipped;
+        public int Unchanged;
     }
 
     internal static class WordImporter
@@ -2258,6 +2274,8 @@ namespace NihongoDeskMemo
 
         public static ImportResult ImportFile(string path, WordDatabase database)
         {
+            if (string.Equals(Path.GetExtension(path), ".xml", StringComparison.OrdinalIgnoreCase))
+                return StructuredWordImporter.ImportFile(path, database);
             ImportResult result = new ImportResult();
             string[] lines = File.ReadAllLines(path, DetectEncoding(path));
             Dictionary<string, WordItem> byJapanese = BuildIndex(database);

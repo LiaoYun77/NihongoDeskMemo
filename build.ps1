@@ -19,7 +19,7 @@ $references = @('System', 'System.Core', 'System.Drawing', 'System.Windows.Forms
     ForEach-Object { '/reference:' + $_ + '.dll' }
 $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml') |
     ForEach-Object { '/reference:' + (Join-Path $referenceRoot ($_ + '.dll')) }
-$sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs') |
+$sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)
@@ -39,6 +39,10 @@ if ($RunTests -or $IncludeDesktopTests) {
     Compile 'exe' 'NihongoDeskMemoWpf.FeatureTests' $featureTest ($sources + (Join-Path $root 'tests\FeatureTests.cs'))
     & $featureTest
     if ($LASTEXITCODE -ne 0) { throw 'Feature tests failed.' }
+    $importTest = Join-Path $testOutput 'ImportTests.exe'
+    Compile 'exe' 'NihongoDeskMemoWpf.ImportTests' $importTest ($sources + (Join-Path $root 'tests\ImportTests.cs'))
+    & $importTest
+    if ($LASTEXITCODE -ne 0) { throw 'Import tests failed.' }
     if ($IncludeDesktopTests) {
         Write-Host 'Desktop tests temporarily register and send F10. Close running copies of the app first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'

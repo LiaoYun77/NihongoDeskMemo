@@ -693,13 +693,23 @@ namespace NihongoDeskMemoWpf
         {
             Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog();
             dialog.Title = "导入词表";
-            dialog.Filter = "文本文件 (*.txt;*.csv)|*.txt;*.csv|所有文件 (*.*)|*.*";
+            dialog.Filter = "支持的词表 (*.xml;*.txt;*.csv)|*.xml;*.txt;*.csv|完整 XML 词库 (*.xml)|*.xml|文本词表 (*.txt;*.csv)|*.txt;*.csv";
             if (dialog.ShowDialog() != true) return;
-            NihongoDeskMemo.ImportResult result = NihongoDeskMemo.WordImporter.ImportFile(dialog.FileName, database);
-            NihongoDeskMemo.Storage.SaveDatabase(database);
-            System.Windows.MessageBox.Show(
-                "新增 " + result.Added.ToString() + " 条，更新 " + result.Updated.ToString() + " 条，跳过 " + result.Skipped.ToString() + " 行。",
-                "导入完成");
+            try
+            {
+                string backup = NihongoDeskMemo.Storage.BackupDatabase();
+                NihongoDeskMemo.ImportResult result = NihongoDeskMemo.WordImporter.ImportFile(dialog.FileName, database);
+                NihongoDeskMemo.Storage.SaveDatabase(database);
+                System.Windows.MessageBox.Show(
+                    "新增 " + result.Added + " 条，更新 " + result.Updated + " 条，已存在 " + result.Unchanged +
+                    " 条，跳过 " + result.Skipped + " 行。" +
+                    (backup.Length > 0 ? "\n导入前词库备份：\n" + backup : string.Empty), "导入完成");
+            }
+            catch (Exception ex)
+            {
+                Exception reason = ex.InnerException ?? ex;
+                System.Windows.MessageBox.Show("导入未完成：" + reason.Message, "导入失败");
+            }
         }
 
         private void OpenLibraryFromSettings()

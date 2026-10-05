@@ -40,6 +40,7 @@
     <Compile Include="src\WpfMain.cs" />
     <Compile Include="src\WpfDialogs.cs" />
     <Compile Include="src\GlobalHideHotkey.cs" />
+    <Compile Include="src\StructuredWordImporter.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
