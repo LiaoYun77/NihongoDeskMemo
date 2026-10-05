@@ -159,7 +159,7 @@ namespace NihongoDeskMemoWpf
         private readonly CheckBox revealBox;
         private readonly CheckBox ratingButtonsBox;
         private readonly ComboBox modeBox;
-        private readonly ComboBox unitBox;
+        private readonly UnitSelectionControl unitSelection;
         private readonly TextBlock countText;
 
         public WpfSettingsWindow(
@@ -168,8 +168,9 @@ namespace NihongoDeskMemoWpf
             Action import,
             Action library,
             Action reset)
-            : base("设置", 480, 480)
+            : base("设置 · v" + AppVersion.Number, 560, 660)
         {
+            Height = Math.Min(660, SystemParameters.WorkArea.Height - 32);
             config = appConfig;
             database = wordDatabase;
             importAction = import;
@@ -183,8 +184,9 @@ namespace NihongoDeskMemoWpf
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             int i;
-            for (i = 0; i < 8; i++) form.RowDefinitions.Add(new RowDefinition { Height = new GridLength(41) });
-            Body.Children.Add(form);
+            for (i = 0; i < 8; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 6 ? GridLength.Auto : new GridLength(41) });
+            Body.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10) });
 
             refreshBox = UiTextBox();
             refreshBox.Text = Math.Max(3, config.RefreshSeconds).ToString();
@@ -207,9 +209,8 @@ namespace NihongoDeskMemoWpf
             modeBox.SelectedIndex = Math.Max(0, Math.Min(3, config.ReviewMode));
             AddRow(form, "抽题方向", modeBox, 5);
 
-            unitBox = UiComboBox();
-            PopulateUnits();
-            AddRow(form, "练习单元", unitBox, 6);
+            unitSelection = new UnitSelectionControl(config, database);
+            AddRow(form, "练习单元", unitSelection, 6);
 
             countText = UiLabel(string.Empty);
             UpdateCount();
@@ -259,18 +260,7 @@ namespace NihongoDeskMemoWpf
 
         private void PopulateUnits()
         {
-            string selected = config.PracticeUnit;
-            unitBox.Items.Clear();
-            unitBox.Items.Add("全部词库");
-            List<string> units = NihongoDeskMemo.Storage.GetUnits(database);
-            int selectedIndex = 0;
-            int i;
-            for (i = 0; i < units.Count; i++)
-            {
-                unitBox.Items.Add(units[i]);
-                if (string.Equals(units[i], selected, StringComparison.OrdinalIgnoreCase)) selectedIndex = i + 1;
-            }
-            unitBox.SelectedIndex = selectedIndex;
+            unitSelection.RefreshUnits(database);
         }
 
         private void UpdateCount()
@@ -302,6 +292,12 @@ namespace NihongoDeskMemoWpf
 
         private void SaveClick(object sender, RoutedEventArgs e)
         {
+            List<string> selected = unitSelection.SelectedUnits();
+            if (!unitSelection.IsAll && selected.Count == 0)
+            {
+                MessageBox.Show(this, "请至少选择一个单元，或勾选全部词库。", "未选择练习单元");
+                return;
+            }
             int seconds;
             if (!int.TryParse(refreshBox.Text, out seconds)) seconds = 30;
             config.RefreshSeconds = Math.Max(3, Math.Min(3600, seconds));
@@ -310,7 +306,7 @@ namespace NihongoDeskMemoWpf
             config.HideMeaningUntilClick = revealBox.IsChecked == true;
             config.ShowRatingButtons = ratingButtonsBox.IsChecked == true;
             config.ReviewMode = Math.Max(0, modeBox.SelectedIndex);
-            config.PracticeUnit = unitBox.SelectedIndex <= 0 ? string.Empty : unitBox.SelectedItem.ToString();
+            PracticeScope.SetUnits(config, unitSelection.IsAll ? new List<string>() : selected);
             DialogResult = true;
             Close();
         }

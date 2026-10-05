@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Xml.Serialization;
 
 namespace NihongoDeskMemoWpf
 {
@@ -17,6 +20,24 @@ namespace NihongoDeskMemoWpf
             Check(!ReviewPresentation.ShouldShowRatingButtons(config, true), "关闭设置后隐藏评级按钮");
             Check(!ReviewPresentation.CanRateWithKeyboard(config, true), "关闭设置后禁用数字键评级");
             Check(!ReviewPresentation.ShouldShowRatingButtons(config, false), "答案未显示时评级按钮保持隐藏");
+
+            XmlSerializer serializer = new XmlSerializer(typeof(NihongoDeskMemo.AppConfig));
+            config = (NihongoDeskMemo.AppConfig)serializer.Deserialize(new StringReader(
+                "<AppConfig><PracticeUnit>第01课</PracticeUnit></AppConfig>"));
+            Check(PracticeScope.Contains(config, "第01课"), "旧单课设置迁移");
+            Check(!PracticeScope.Contains(config, "第02课"), "旧单课不扩大为全部");
+            PracticeScope.SetUnits(config, new string[] { "第01课", "第03课", " 第03课 " });
+            Check(PracticeScope.GetUnits(config).Count == 2, "多课设置去除重复项");
+            Check(PracticeScope.Contains(config, "第01课") && PracticeScope.Contains(config, "第03课"), "包含多个选定单元");
+            Check(!PracticeScope.Contains(config, "第02课") && !PracticeScope.Contains(config, ""), "排除未选及未分组词条");
+            StringWriter saved = new StringWriter();
+            serializer.Serialize(saved, config);
+            config = (NihongoDeskMemo.AppConfig)serializer.Deserialize(new StringReader(saved.ToString()));
+            Check(PracticeScope.GetUnits(config).Count == 2 && !PracticeScope.Contains(config, "第02课"), "多选配置保存重读一致");
+            PracticeScope.SetUnits(config, new string[0]);
+            Check(PracticeScope.Contains(config, "第02课") && PracticeScope.Contains(config, ""), "全部范围包含未分组词条");
+            config.PracticeUnits = new string[] { "Missing unit" };
+            Check(!PracticeScope.Contains(config, "第01课"), "已删除的课次不回退为全部");
 
             if (failures > 0)
             {

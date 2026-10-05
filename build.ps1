@@ -1,6 +1,7 @@
 param(
     [switch]$RunTests,
-    [switch]$IncludeDesktopTests
+    [switch]$IncludeDesktopTests,
+    [string]$ReferencePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,7 @@ if (!(Test-Path -LiteralPath $compiler)) {
 $programFiles = ${env:ProgramFiles(x86)}
 if (!$programFiles) { $programFiles = $env:ProgramFiles }
 $referenceRoot = Join-Path $programFiles 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.0'
+if ($ReferencePath) { $referenceRoot = $ReferencePath }
 if (!(Test-Path -LiteralPath $compiler)) { throw '.NET Framework C# compiler not found.' }
 if (!(Test-Path -LiteralPath $referenceRoot)) { throw '.NET Framework 4.0 reference assemblies are required.' }
 
@@ -19,7 +21,8 @@ $references = @('System', 'System.Core', 'System.Drawing', 'System.Windows.Forms
     ForEach-Object { '/reference:' + $_ + '.dll' }
 $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml') |
     ForEach-Object { '/reference:' + (Join-Path $referenceRoot ($_ + '.dll')) }
-$sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs') |
+$sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs',
+    'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)
@@ -43,6 +46,10 @@ if ($RunTests -or $IncludeDesktopTests) {
     Compile 'exe' 'NihongoDeskMemoWpf.ImportTests' $importTest ($sources + (Join-Path $root 'tests\ImportTests.cs'))
     & $importTest
     if ($LASTEXITCODE -ne 0) { throw 'Import tests failed.' }
+    $settingsTest = Join-Path $testOutput 'SettingsTests.exe'
+    Compile 'exe' 'NihongoDeskMemoWpf.SettingsTests' $settingsTest ($sources + (Join-Path $root 'tests\SettingsTests.cs'))
+    & $settingsTest
+    if ($LASTEXITCODE -ne 0) { throw 'Settings tests failed.' }
     if ($IncludeDesktopTests) {
         Write-Host 'Desktop tests temporarily register and send F10. Close running copies of the app first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'

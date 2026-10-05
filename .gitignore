@@ -16,3 +16,4 @@ config.xml
 backups/
 __pycache__/
 *.pyc
+dist/
