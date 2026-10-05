@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.exe
+*.dll
+*.pdb
+*.zip
+words.xml
+config.xml
+*.bak
+*.log
+.env
+.env.*
