@@ -69,6 +69,9 @@ namespace NihongoDeskMemo
     public class AppConfig
     {
         public int RefreshSeconds { get; set; }
+        public int HideHotkey { get; set; }
+        public int HideHotkeyVirtualKey { get; set; }
+        public int HideHotkeyModifiers { get; set; }
         public int RevealSeconds { get; set; }
         public bool AlwaysOnTop { get; set; }
         public int OpacityPercent { get; set; }
@@ -86,6 +89,7 @@ namespace NihongoDeskMemo
         public AppConfig()
         {
             RefreshSeconds = 30;
+            HideHotkey = 10;
             RevealSeconds = 0;
             AlwaysOnTop = true;
             OpacityPercent = 100;

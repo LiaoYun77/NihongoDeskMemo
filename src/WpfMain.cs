@@ -282,15 +282,21 @@ namespace NihongoDeskMemoWpf
             RestoreLocation();
             ApplyConfig();
             ShowNextWord();
-            globalHideHotkey = new GlobalHideHotkey(this);
+            HotkeyGesture shortcut = HotkeyGesture.FromConfig(config);
+            globalHideHotkey = new GlobalHideHotkey(this, shortcut);
             globalHideHotkey.VisibilityChanged += GlobalVisibilityChanged;
+            UpdateHideShortcutTip();
+            if (globalHideHotkey.Shortcut.Length > 0 && globalHideHotkey.Shortcut != shortcut.DisplayName)
+                MessageBox.Show(this, shortcut.DisplayName + " 已被占用，本次全局隐藏 / 恢复改为 " + globalHideHotkey.Shortcut + "。", "快捷键提示");
+            else if (globalHideHotkey.Shortcut.Length == 0)
+                MessageBox.Show(this, shortcut.DisplayName + " 全局隐藏快捷键启用失败。\n请在设置中选择其他按键，或关闭占用快捷键的程序。", "快捷键不可用");
+        }
+
+        private void UpdateHideShortcutTip()
+        {
             hideButton.ToolTip = globalHideHotkey.Shortcut.Length > 0
                 ? "点击后保留显示按钮；" + globalHideHotkey.Shortcut + " 全局隐藏 / 恢复全部窗口"
                 : "点击后保留显示按钮；全局快捷键注册失败";
-            if (globalHideHotkey.Shortcut == "Ctrl+Alt+F10")
-                MessageBox.Show(this, "F10 已被占用，全局隐藏 / 恢复改为 Ctrl+Alt+F10。", "快捷键提示");
-            else if (globalHideHotkey.Shortcut.Length == 0)
-                MessageBox.Show(this, "F10 和 Ctrl+Alt+F10 均注册失败，本次全局隐藏不可用。\n请关闭重复运行的本软件或占用快捷键的程序，然后重新启动。", "快捷键不可用");
         }
 
         private void GlobalVisibilityChanged(object sender, EventArgs e)
@@ -678,7 +684,18 @@ namespace NihongoDeskMemoWpf
                     OpenLibraryFromSettings,
                     ResetReviewProgress);
                 form.Owner = this;
+                form.RecordingChanged = globalHideHotkey.SetRecording;
+                form.ApplyHideHotkey = delegate(HotkeyGesture key)
+                {
+                    string error;
+                    if (!globalHideHotkey.TryChange(key, out error)) return error;
+                    UpdateHideShortcutTip();
+                    return string.Empty;
+                };
                 if (form.ShowDialog() == true) NihongoDeskMemo.Storage.SaveConfig(config);
+                UpdateHideShortcutTip();
+                if (globalHideHotkey.Shortcut.Length == 0)
+                    MessageBox.Show(this, "原快捷键恢复失败，请重新打开设置选择其他按键。", "快捷键不可用");
             }
             catch (Exception ex)
             {

@@ -22,7 +22,7 @@ $references = @('System', 'System.Core', 'System.Drawing', 'System.Windows.Forms
 $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml') |
     ForEach-Object { '/reference:' + (Join-Path $referenceRoot ($_ + '.dll')) }
 $sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs',
-    'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs') |
+    'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs', 'HotkeyGesture.cs', 'HotkeyRecorder.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)
@@ -51,9 +51,11 @@ if ($RunTests -or $IncludeDesktopTests) {
     & $settingsTest
     if ($LASTEXITCODE -ne 0) { throw 'Settings tests failed.' }
     if ($IncludeDesktopTests) {
-        Write-Host 'Desktop tests temporarily register and send F10. Close running copies of the app first.'
+        Write-Host 'Desktop tests temporarily register/send F10-F12 and Ctrl+Shift+Q. Close running copies first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'
         Compile 'exe' 'NihongoDeskMemoWpf.GlobalHideTests' $desktopTest ($sources + (Join-Path $root 'tests\GlobalHideTests.cs'))
+        & $desktopTest --registration
+        if ($LASTEXITCODE -ne 0) { throw 'Hotkey registration tests failed.' }
         & $desktopTest
         if ($LASTEXITCODE -ne 0) { throw 'Global hotkey tests failed.' }
         & $desktopTest --app
