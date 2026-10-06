@@ -51,7 +51,7 @@ if ($RunTests -or $IncludeDesktopTests) {
     & $settingsTest
     if ($LASTEXITCODE -ne 0) { throw 'Settings tests failed.' }
     if ($IncludeDesktopTests) {
-        Write-Host 'Desktop tests temporarily register and send F10. Close running copies of the app first.'
+        Write-Host 'Desktop tests temporarily register and send F10-F12. Close running copies of the app first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'
         Compile 'exe' 'NihongoDeskMemoWpf.GlobalHideTests' $desktopTest ($sources + (Join-Path $root 'tests\GlobalHideTests.cs'))
         & $desktopTest

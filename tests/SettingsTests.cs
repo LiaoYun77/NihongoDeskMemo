@@ -21,6 +21,10 @@ namespace NihongoDeskMemoWpf
                 WordDatabase database = new WordDatabase();
                 for (int i = 1; i <= 48; i++) database.Words.Add(new WordItem { Unit = "第" + i.ToString("00") + "课" });
                 WpfSettingsWindow window = new WpfSettingsWindow(config, database, null, null, null);
+                ComboBox hotkeys = (ComboBox)Field(window, "hideHotkeyBox");
+                Check(hotkeys.Items.Count == 3 && (string)hotkeys.SelectedItem == "F10", "default and available hide keys");
+                hotkeys.SelectedItem = "F12";
+                Check(config.HideHotkey == 10, "changing selection without saving does not modify config");
                 UnitSelectionControl control = (UnitSelectionControl)Field(window, "unitSelection");
                 Check(!control.IsAll && control.SelectedUnits()[0] == "第01课", "legacy selection displayed");
                 List<CheckBox> boxes = (List<CheckBox>)Field(control, "boxes");
@@ -46,6 +50,13 @@ namespace NihongoDeskMemoWpf
                 Check(control.IsAll, "all-units toggle works");
                 ((CheckBox)Field(control, "allBox")).IsChecked = false;
                 Check(control.SelectedUnits().Count == 3, "toggling all retains manual choices");
+                object[] saveArgs = new object[] { null };
+                MethodInfo save = typeof(WpfSettingsWindow).GetMethod("TrySaveSettings", BindingFlags.Instance | BindingFlags.NonPublic);
+                window.ApplyHideHotkey = delegate(int key) { return "occupied"; };
+                Check(!(bool)save.Invoke(window, saveArgs) && config.HideHotkey == 10, "failed registration does not save selected key");
+                int applied = 0;
+                window.ApplyHideHotkey = delegate(int key) { applied = key; return string.Empty; };
+                Check((bool)save.Invoke(window, saveArgs) && config.HideHotkey == 12 && applied == 12, "save applies and stores F12");
                 window.Close();
 
                 MemoWindow main = new MemoWindow { Left = 0, Top = 0 };

@@ -6,6 +6,22 @@
 
 暂无。
 
+## [0.3.0] - 2026-10-06
+
+### 新增
+- 设置新增“全局隐藏快捷键”，可选择 F10、F11、F12；保存并关闭后立即生效，重启后保留。
+- F12 使用独立线程的按键监听，支持软件在后台时隐藏 / 恢复全部窗口，长按不会反复切换。
+
+### 改进
+- 切换前先检查新快捷键；冲突或启用失败时保留原按键，不保存失败的选择。
+- 旧配置默认仍为 F10，保留 F8 显示答案与 F9 显示工具栏；关闭设置但未保存不会修改快捷键。
+- 隐藏按钮提示随当前生效快捷键更新，保留原有模态窗口、未保存编辑及暂停换词行为。
+
+### 注意
+- 选用 F12 后，本软件运行期间会拦截不带修饰键的 F12；浏览器等程序原本的 F12 功能需换键或退出本软件后使用。
+- F12 不使用 Windows 保留的 RegisterHotKey 注册方式；不记录键盘输入。其他软件的键盘钩子、锁屏、UAC 安全桌面或程序无响应仍可能影响全局按键。
+- 启动时 F10/F11 被占用，保留 Ctrl+Alt+对应按键的临时回退并弹窗告知；设置中切换遇冲突则提示重选。
+
 ## [0.2.0] - 2026-10-05
 
 ### 新增
@@ -32,5 +48,6 @@
 - 已有能力包括透明悬浮、词库管理、四种复习方向、复习评级、F10 全局隐藏。
 - 旧文件名 TextOnly / ImportXml 不是正式版本号，不为它们补造已发布版本。
 
-[Unreleased]: https://github.com/LiaoYun77/NihongoDeskMemo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/LiaoYun77/NihongoDeskMemo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/LiaoYun77/NihongoDeskMemo/releases/tag/v0.3.0
 [0.2.0]: https://github.com/LiaoYun77/NihongoDeskMemo/releases/tag/v0.2.0

@@ -159,6 +159,8 @@ namespace NihongoDeskMemoWpf
         private readonly CheckBox revealBox;
         private readonly CheckBox ratingButtonsBox;
         private readonly ComboBox modeBox;
+        private readonly ComboBox hideHotkeyBox;
+        public Func<int, string> ApplyHideHotkey { get; set; }
         private readonly UnitSelectionControl unitSelection;
         private readonly TextBlock countText;
 
@@ -184,7 +186,7 @@ namespace NihongoDeskMemoWpf
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             int i;
-            for (i = 0; i < 8; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 6 ? GridLength.Auto : new GridLength(41) });
+            for (i = 0; i < 9; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 6 ? GridLength.Auto : new GridLength(41) });
             Body.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10) });
 
@@ -215,6 +217,11 @@ namespace NihongoDeskMemoWpf
             countText = UiLabel(string.Empty);
             UpdateCount();
             AddRow(form, "词库", countText, 7);
+
+            hideHotkeyBox = UiComboBox();
+            for (i = 10; i <= 12; i++) hideHotkeyBox.Items.Add("F" + i);
+            hideHotkeyBox.SelectedIndex = GlobalHideHotkey.NormalizeKey(config.HideHotkey) - 10;
+            AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 8);
 
             StackPanel actions = new StackPanel();
             actions.Orientation = Orientation.Horizontal;
@@ -292,13 +299,34 @@ namespace NihongoDeskMemoWpf
 
         private void SaveClick(object sender, RoutedEventArgs e)
         {
+            string error;
+            if (!TrySaveSettings(out error))
+            {
+                MessageBox.Show(this, error, "设置未保存");
+                return;
+            }
+            DialogResult = true;
+            Close();
+        }
+
+        private bool TrySaveSettings(out string error)
+        {
+            error = string.Empty;
             List<string> selected = unitSelection.SelectedUnits();
             if (!unitSelection.IsAll && selected.Count == 0)
             {
-                MessageBox.Show(this, "请至少选择一个单元，或勾选全部词库。", "未选择练习单元");
-                return;
+                error = "请至少选择一个单元，或勾选全部词库。";
+                return false;
             }
             int seconds;
+            int hotkey = hideHotkeyBox.SelectedIndex + 10;
+            if (hideHotkeyBox.SelectedIndex < 0) { error = "请选择隐藏快捷键。"; return false; }
+            error = ApplyHideHotkey == null ? string.Empty : ApplyHideHotkey(hotkey);
+            if (!string.IsNullOrEmpty(error))
+            {
+                return false;
+            }
+            config.HideHotkey = hotkey;
             if (!int.TryParse(refreshBox.Text, out seconds)) seconds = 30;
             config.RefreshSeconds = Math.Max(3, Math.Min(3600, seconds));
             config.AlwaysOnTop = topMostBox.IsChecked == true;
@@ -307,8 +335,7 @@ namespace NihongoDeskMemoWpf
             config.ShowRatingButtons = ratingButtonsBox.IsChecked == true;
             config.ReviewMode = Math.Max(0, modeBox.SelectedIndex);
             PracticeScope.SetUnits(config, unitSelection.IsAll ? new List<string>() : selected);
-            DialogResult = true;
-            Close();
+            return true;
         }
     }
 
