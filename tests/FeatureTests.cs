@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Serialization;
+using System.Windows.Input;
 
 namespace NihongoDeskMemoWpf
 {
@@ -15,6 +16,17 @@ namespace NihongoDeskMemoWpf
 
             Check(config.ShowRatingButtons, "评级按钮默认显示");
             Check(config.HideHotkey == 10, "旧配置默认使用 F10");
+            HotkeyGesture gesture;
+            string shortcutError;
+            Check(HotkeyGesture.TryCreate(Key.Q, ModifierKeys.Control, out gesture, out shortcutError)
+                && gesture.DisplayName == "Ctrl+Q", "支持 Ctrl+字母");
+            Check(HotkeyGesture.TryCreate(Key.D5, ModifierKeys.None, out gesture, out shortcutError)
+                && gesture.DisplayName == "5", "支持独立数字键");
+            Check(HotkeyGesture.TryCreate(Key.F12, ModifierKeys.Alt | ModifierKeys.Shift, out gesture, out shortcutError)
+                && gesture.DisplayName == "Alt+Shift+F12", "支持带修饰键的 F12");
+            Check(!HotkeyGesture.TryCreate(Key.LeftCtrl, ModifierKeys.Control, out gesture, out shortcutError), "拒绝单独修饰键");
+            Check(!HotkeyGesture.TryCreate(Key.L, ModifierKeys.Windows, out gesture, out shortcutError), "拒绝系统 Win 组合");
+            Check(!HotkeyGesture.TryCreate(Key.Delete, ModifierKeys.Control | ModifierKeys.Alt, out gesture, out shortcutError), "拒绝系统安全组合");
             Check(GlobalHideHotkey.NormalizeKey(12) == 12 && GlobalHideHotkey.NormalizeKey(11) == 11,
                 "支持 F11 和 F12");
             Check(GlobalHideHotkey.NormalizeKey(8) == 10, "无效隐藏键恢复默认，避免占用答案键");
@@ -31,6 +43,9 @@ namespace NihongoDeskMemoWpf
             Check(PracticeScope.Contains(config, "第01课"), "旧单课设置迁移");
             Check(config.HideHotkey == 10, "缺少快捷键字段的 XML 兼容 F10");
             config.HideHotkey = 12;
+            Check(HotkeyGesture.FromConfig(config).DisplayName == "F12", "旧 F12 配置兼容");
+            HotkeyGesture.TryCreate(Key.K, ModifierKeys.Control | ModifierKeys.Shift, out gesture, out shortcutError);
+            gesture.SaveTo(config);
             Check(!PracticeScope.Contains(config, "第02课"), "旧单课不扩大为全部");
             PracticeScope.SetUnits(config, new string[] { "第01课", "第03课", " 第03课 " });
             Check(PracticeScope.GetUnits(config).Count == 2, "多课设置去除重复项");
@@ -41,6 +56,7 @@ namespace NihongoDeskMemoWpf
             config = (NihongoDeskMemo.AppConfig)serializer.Deserialize(new StringReader(saved.ToString()));
             Check(PracticeScope.GetUnits(config).Count == 2 && !PracticeScope.Contains(config, "第02课"), "多选配置保存重读一致");
             Check(config.HideHotkey == 12, "F12 设置序列化后保留");
+            Check(HotkeyGesture.FromConfig(config).DisplayName == "Ctrl+Shift+K", "任意组合保存重读一致");
             PracticeScope.SetUnits(config, new string[0]);
             Check(PracticeScope.Contains(config, "第02课") && PracticeScope.Contains(config, ""), "全部范围包含未分组词条");
             config.PracticeUnits = new string[] { "Missing unit" };

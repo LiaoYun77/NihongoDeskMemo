@@ -159,8 +159,9 @@ namespace NihongoDeskMemoWpf
         private readonly CheckBox revealBox;
         private readonly CheckBox ratingButtonsBox;
         private readonly ComboBox modeBox;
-        private readonly ComboBox hideHotkeyBox;
-        public Func<int, string> ApplyHideHotkey { get; set; }
+        private readonly HotkeyRecorder hideHotkeyBox;
+        public Func<HotkeyGesture, string> ApplyHideHotkey { get; set; }
+        public Func<bool, string> RecordingChanged { get; set; }
         private readonly UnitSelectionControl unitSelection;
         private readonly TextBlock countText;
 
@@ -218,9 +219,12 @@ namespace NihongoDeskMemoWpf
             UpdateCount();
             AddRow(form, "词库", countText, 7);
 
-            hideHotkeyBox = UiComboBox();
-            for (i = 10; i <= 12; i++) hideHotkeyBox.Items.Add("F" + i);
-            hideHotkeyBox.SelectedIndex = GlobalHideHotkey.NormalizeKey(config.HideHotkey) - 10;
+            hideHotkeyBox = new HotkeyRecorder(HotkeyGesture.FromConfig(config));
+            hideHotkeyBox.RecordingChanged = delegate(bool recording)
+            {
+                return RecordingChanged == null ? string.Empty : RecordingChanged(recording);
+            };
+            Closed += delegate { hideHotkeyBox.EndRecording(); };
             AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 8);
 
             StackPanel actions = new StackPanel();
@@ -319,14 +323,14 @@ namespace NihongoDeskMemoWpf
                 return false;
             }
             int seconds;
-            int hotkey = hideHotkeyBox.SelectedIndex + 10;
-            if (hideHotkeyBox.SelectedIndex < 0) { error = "请选择隐藏快捷键。"; return false; }
+            hideHotkeyBox.EndRecording();
+            HotkeyGesture hotkey = hideHotkeyBox.Gesture;
             error = ApplyHideHotkey == null ? string.Empty : ApplyHideHotkey(hotkey);
             if (!string.IsNullOrEmpty(error))
             {
                 return false;
             }
-            config.HideHotkey = hotkey;
+            hotkey.SaveTo(config);
             if (!int.TryParse(refreshBox.Text, out seconds)) seconds = 30;
             config.RefreshSeconds = Math.Max(3, Math.Min(3600, seconds));
             config.AlwaysOnTop = topMostBox.IsChecked == true;

@@ -282,14 +282,14 @@ namespace NihongoDeskMemoWpf
             RestoreLocation();
             ApplyConfig();
             ShowNextWord();
-            config.HideHotkey = GlobalHideHotkey.NormalizeKey(config.HideHotkey);
-            globalHideHotkey = new GlobalHideHotkey(this, config.HideHotkey);
+            HotkeyGesture shortcut = HotkeyGesture.FromConfig(config);
+            globalHideHotkey = new GlobalHideHotkey(this, shortcut);
             globalHideHotkey.VisibilityChanged += GlobalVisibilityChanged;
             UpdateHideShortcutTip();
-            if (globalHideHotkey.Shortcut.StartsWith("Ctrl+Alt+"))
-                MessageBox.Show(this, "F" + config.HideHotkey + " 已被占用，本次全局隐藏 / 恢复改为 " + globalHideHotkey.Shortcut + "。", "快捷键提示");
+            if (globalHideHotkey.Shortcut.Length > 0 && globalHideHotkey.Shortcut != shortcut.DisplayName)
+                MessageBox.Show(this, shortcut.DisplayName + " 已被占用，本次全局隐藏 / 恢复改为 " + globalHideHotkey.Shortcut + "。", "快捷键提示");
             else if (globalHideHotkey.Shortcut.Length == 0)
-                MessageBox.Show(this, "F" + config.HideHotkey + " 全局隐藏快捷键启用失败。\n请在设置中选择其他按键，或关闭占用快捷键的程序。", "快捷键不可用");
+                MessageBox.Show(this, shortcut.DisplayName + " 全局隐藏快捷键启用失败。\n请在设置中选择其他按键，或关闭占用快捷键的程序。", "快捷键不可用");
         }
 
         private void UpdateHideShortcutTip()
@@ -684,7 +684,8 @@ namespace NihongoDeskMemoWpf
                     OpenLibraryFromSettings,
                     ResetReviewProgress);
                 form.Owner = this;
-                form.ApplyHideHotkey = delegate(int key)
+                form.RecordingChanged = globalHideHotkey.SetRecording;
+                form.ApplyHideHotkey = delegate(HotkeyGesture key)
                 {
                     string error;
                     if (!globalHideHotkey.TryChange(key, out error)) return error;
@@ -692,6 +693,9 @@ namespace NihongoDeskMemoWpf
                     return string.Empty;
                 };
                 if (form.ShowDialog() == true) NihongoDeskMemo.Storage.SaveConfig(config);
+                UpdateHideShortcutTip();
+                if (globalHideHotkey.Shortcut.Length == 0)
+                    MessageBox.Show(this, "原快捷键恢复失败，请重新打开设置选择其他按键。", "快捷键不可用");
             }
             catch (Exception ex)
             {

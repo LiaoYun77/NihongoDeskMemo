@@ -21,13 +21,17 @@ namespace NihongoDeskMemoWpf
         private bool disposed;
 
         public string Shortcut { get; private set; }
-        public int SelectedKey { get; private set; }
+        public HotkeyGesture SelectedGesture { get; private set; }
+        private bool recording;
+        private HotkeyGesture resumeGesture;
         public bool IsHidden { get; private set; }
         public event EventHandler VisibilityChanged;
 
         public GlobalHideHotkey(Window window) : this(window, 10) { }
 
-        public GlobalHideHotkey(Window window, int key)
+        public GlobalHideHotkey(Window window, int key) : this(window, HotkeyGesture.FunctionKey(key)) { }
+
+        public GlobalHideHotkey(Window window, HotkeyGesture key)
         {
             handle = new WindowInteropHelper(window).EnsureHandle();
             threadId = GetCurrentThreadId();
@@ -35,12 +39,12 @@ namespace NihongoDeskMemoWpf
             source.AddHook(WindowMessage);
             Shortcut = string.Empty;
             string error;
-            key = NormalizeKey(key);
-            if (!TryChange(key, out error) && key != 12 && RegisterHotKey(handle, hotkeyId, 0x4003, (uint)(0x6F + key)))
+            if (!TryChange(key, out error) && key.Modifiers == 0 && (key.VirtualKey == 0x79 || key.VirtualKey == 0x7A))
             {
-                registered = true;
-                SelectedKey = key;
-                Shortcut = "Ctrl+Alt+F" + key;
+                HotkeyGesture fallback;
+                HotkeyGesture.TryCreate(System.Windows.Input.KeyInterop.KeyFromVirtualKey(key.VirtualKey),
+                    System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt, out fallback, out error);
+                TryChange(fallback, out error);
             }
         }
 
@@ -48,14 +52,19 @@ namespace NihongoDeskMemoWpf
 
         public bool TryChange(int key, out string error)
         {
+            return TryChange(HotkeyGesture.FunctionKey(key), out error);
+        }
+
+        public bool TryChange(HotkeyGesture key, out string error)
+        {
             error = string.Empty;
-            if (disposed || NormalizeKey(key) != key) { error = "请选择 F10、F11 或 F12。"; return false; }
-            if (SelectedKey == key && Shortcut.Length > 0) return true;
+            if (disposed || recording || key == null) { error = "请先结束快捷键录入。"; return false; }
+            if (key.SameAs(SelectedGesture) && Shortcut.Length > 0) return true;
             int nextId = hotkeyId == 0x4E48 ? 0x4E49 : 0x4E48;
             F12Listener nextListener = null;
-            if (key == 12)
+            if (key.VirtualKey == 0x7B)
             {
-                nextListener = new F12Listener(delegate { PostMessage(handle, 0x0312, new IntPtr(nextId), IntPtr.Zero); });
+                nextListener = new F12Listener(delegate { PostMessage(handle, 0x0312, new IntPtr(nextId), IntPtr.Zero); }, key.Modifiers);
                 if (!nextListener.Available)
                 {
                     nextListener.Dispose();
@@ -64,19 +73,42 @@ namespace NihongoDeskMemoWpf
                 }
             }
             // Acquire the replacement first; a conflict must not remove the working key.
-            else if (!RegisterHotKey(handle, nextId, 0x4000, (uint)(0x6F + key)))
+            else if (!RegisterHotKey(handle, nextId, 0x4000 | key.Modifiers, (uint)key.VirtualKey))
             {
-                error = "F" + key + " 已被占用或无法注册，请选择其他按键。原快捷键未改变。";
+                error = key.DisplayName + " 已被占用或无法注册，请选择其他按键。原快捷键未改变。";
                 return false;
             }
+            ReleaseKey();
+            f12Listener = nextListener;
+            registered = key.VirtualKey != 0x7B;
+            hotkeyId = nextId;
+            SelectedGesture = key;
+            Shortcut = key.DisplayName;
+            return true;
+        }
+
+        public string SetRecording(bool value)
+        {
+            if (disposed || recording == value) return string.Empty;
+            recording = value;
+            if (value)
+            {
+                resumeGesture = SelectedGesture;
+                ReleaseKey();
+                return string.Empty;
+            }
+            string error = string.Empty;
+            if (resumeGesture != null) TryChange(resumeGesture, out error);
+            return error;
+        }
+
+        private void ReleaseKey()
+        {
             if (registered) UnregisterHotKey(handle, hotkeyId);
             if (f12Listener != null) f12Listener.Dispose();
-            f12Listener = nextListener;
-            registered = key != 12;
-            hotkeyId = nextId;
-            SelectedKey = key;
-            Shortcut = "F" + key;
-            return true;
+            registered = false;
+            f12Listener = null;
+            Shortcut = string.Empty;
         }
 
         private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -127,8 +159,7 @@ namespace NihongoDeskMemoWpf
         {
             if (disposed) return;
             disposed = true;
-            if (registered) UnregisterHotKey(handle, hotkeyId);
-            if (f12Listener != null) f12Listener.Dispose();
+            ReleaseKey();
             if (!source.IsDisposed) source.RemoveHook(WindowMessage);
         }
 
@@ -166,7 +197,7 @@ namespace NihongoDeskMemoWpf
     }
 
     // F12 is reserved by RegisterHotKey. Keep its hook on a dedicated message loop
-    // so slow UI work cannot time it out. Only bare F12 is consumed, never stored.
+    // so slow UI work cannot time it out. Only the selected F12 chord is consumed.
     internal sealed class F12Listener : IDisposable
     {
         private readonly Thread thread;
@@ -176,10 +207,14 @@ namespace NihongoDeskMemoWpf
         private Dispatcher dispatcher;
         private IntPtr hook;
         private bool keyDown;
+        private readonly uint modifiers;
         public bool Available { get; private set; }
 
-        public F12Listener(Action action)
+        public F12Listener(Action action) : this(action, 0) { }
+
+        public F12Listener(Action action, uint modifiers)
         {
+            this.modifiers = modifiers;
             pressed = action;
             callback = OnKey;
             thread = new Thread(Run) { IsBackground = true, Name = "F12 hide shortcut" };
@@ -195,7 +230,7 @@ namespace NihongoDeskMemoWpf
             try
             {
                 dispatcher = Dispatcher.CurrentDispatcher;
-                ownership = new Mutex(false, "Local\\NihongoDeskMemo.F12GlobalHide");
+                ownership = new Mutex(false, "Local\\NihongoDeskMemo.F12GlobalHide" + (modifiers == 0 ? "" : "." + modifiers));
                 try { owned = ownership.WaitOne(0); }
                 catch (AbandonedMutexException) { owned = true; }
                 if (owned) hook = SetWindowsHookEx(13, callback, GetModuleHandle(null), 0);
@@ -224,7 +259,9 @@ namespace NihongoDeskMemoWpf
                 else if (kind == 0x0100 || kind == 0x0104)
                 {
                     if (keyDown) return new IntPtr(1);
-                    if (!Held(0x10) && !Held(0x11) && !Held(0x12) && !Held(0x5B) && !Held(0x5C))
+                    uint current = (Held(0x12) ? 1u : 0) | (Held(0x11) ? 2u : 0) |
+                        (Held(0x10) ? 4u : 0) | ((Held(0x5B) || Held(0x5C)) ? 8u : 0);
+                    if (current == modifiers)
                     {
                         keyDown = true;
                         pressed();

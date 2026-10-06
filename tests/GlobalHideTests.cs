@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace NihongoDeskMemoWpf
@@ -31,6 +32,7 @@ namespace NihongoDeskMemoWpf
         private static void Main(string[] args)
         {
             if (args.Length > 0 && args[0] == "--app") { TestApp(); return; }
+            if (args.Length > 0 && args[0] == "--registration") { TestRegistration(); return; }
             Window main = new Window { Title = "Global hide test", Width = 180, Height = 100,
                 ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000 };
             GlobalHideHotkey hotkey = null;
@@ -134,13 +136,26 @@ namespace NihongoDeskMemoWpf
 
         private static void Press(string shortcut)
         {
-            bool modified = shortcut.StartsWith("Ctrl+Alt+");
-            ushort key = (ushort)(0x6F + int.Parse(shortcut.Substring(shortcut.LastIndexOf('F') + 1)));
-            if (modified) { SendKey(0x11, 0); SendKey(0x12, 0); }
-            SendKey(key, 0);
-            Pump();
-            SendKey(key, 2);
-            if (modified) { SendKey(0x12, 2); SendKey(0x11, 2); }
+            string[] parts = shortcut.Split('+');
+            ushort key = (ushort)KeyInterop.VirtualKeyFromKey((Key)Enum.Parse(typeof(Key), parts[parts.Length - 1]));
+            bool ctrl = shortcut.Contains("Ctrl+");
+            bool alt = shortcut.Contains("Alt+");
+            bool shift = shortcut.Contains("Shift+");
+            try
+            {
+                if (ctrl) SendKey(0x11, 0);
+                if (alt) SendKey(0x12, 0);
+                if (shift) SendKey(0x10, 0);
+                SendKey(key, 0);
+                Pump();
+            }
+            finally
+            {
+                SendKey(key, 2);
+                if (shift) SendKey(0x10, 2);
+                if (alt) SendKey(0x12, 2);
+                if (ctrl) SendKey(0x11, 2);
+            }
             Pump();
         }
 
@@ -159,7 +174,7 @@ namespace NihongoDeskMemoWpf
             try
             {
                 NihongoDeskMemo.AppConfig config = (NihongoDeskMemo.AppConfig)Field(main, "config");
-                config.HideHotkey = 12;
+                HotkeyGesture.FunctionKey(12).SaveTo(config);
                 main.ShowActivated = false;
                 main.Show();
                 Pump();
@@ -191,6 +206,12 @@ namespace NihongoDeskMemoWpf
                 Check(hotkey.IsHidden, "newly saved F11 hides app");
                 Press("F11");
                 Check(!hotkey.IsHidden, "newly saved F11 restores app");
+                ExerciseSettings(main, "Ctrl+Shift+Q", true);
+                Check(HotkeyGesture.FromConfig(NihongoDeskMemo.Storage.LoadConfig()).DisplayName == "Ctrl+Shift+Q", "custom chord persists to XML");
+                Press("Ctrl+Shift+Q");
+                Check(hotkey.IsHidden, "saved custom chord hides app");
+                Press("Ctrl+Shift+Q");
+                Check(!hotkey.IsHidden, "saved custom chord restores app");
                 Console.WriteLine("App integration tests passed.");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
@@ -208,8 +229,12 @@ namespace NihongoDeskMemoWpf
                     foreach (Window owned in main.OwnedWindows)
                         if (owned is WpfSettingsWindow) settings = (WpfSettingsWindow)owned;
                     Check(settings != null, "real settings dialog opened");
-                    ComboBox choices = (ComboBox)typeof(WpfSettingsWindow).GetField("hideHotkeyBox", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(settings);
-                    choices.SelectedItem = key;
+                    HotkeyRecorder choices = (HotkeyRecorder)typeof(WpfSettingsWindow).GetField("hideHotkeyBox", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(settings);
+                    settings.Activate();
+                    choices.Focus();
+                    Check(choices.IsKeyboardFocused && choices.IsRecording, "focusing recorder starts capture");
+                    Press(key);
+                    Check(choices.Gesture.DisplayName == key, "real keyboard input recorded correctly");
                     if (save) typeof(WpfSettingsWindow).GetMethod("SaveClick", BindingFlags.Instance | BindingFlags.NonPublic)
                         .Invoke(settings, new object[] { settings, new RoutedEventArgs() });
                     else settings.Close();
@@ -224,6 +249,42 @@ namespace NihongoDeskMemoWpf
         private static object Field(MemoWindow window, string name)
         {
             return typeof(MemoWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+        }
+
+        private static void TestRegistration()
+        {
+            Window window = new Window();
+            GlobalHideHotkey hotkey = null;
+            try
+            {
+                HotkeyGesture first, second, f12;
+                string error;
+                ModifierKeys mods = ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift;
+                HotkeyGesture.TryCreate(Key.Q, mods, out first, out error);
+                HotkeyGesture.TryCreate(Key.K, mods, out second, out error);
+                HotkeyGesture.TryCreate(Key.F12, ModifierKeys.Control, out f12, out error);
+                hotkey = new GlobalHideHotkey(window, first);
+                IntPtr handle = new WindowInteropHelper(window).Handle;
+                Check(hotkey.Shortcut == "Ctrl+Alt+Shift+Q", "native arbitrary chord registration");
+                Check(hotkey.SetRecording(true).Length == 0 && hotkey.Shortcut.Length == 0, "recording suspends shortcut");
+                Check(RegisterHotKey(handle, 9100, 0x4000 | first.Modifiers, (uint)first.VirtualKey), "recording releases native key for capture");
+                try { Check(hotkey.SetRecording(false).Length > 0, "resume conflict is reported"); }
+                finally { UnregisterHotKey(handle, 9100); }
+                Check(hotkey.TryChange(first, out error), "restore after conflict removed");
+                Check(RegisterHotKey(handle, 9100, 0x4000 | second.Modifiers, (uint)second.VirtualKey), "reserve conflicting chord");
+                try { Check(!hotkey.TryChange(second, out error) && hotkey.Shortcut == first.DisplayName, "failed chord replacement retains old key"); }
+                finally { UnregisterHotKey(handle, 9100); }
+                Check(hotkey.TryChange(second, out error), "change arbitrary chord");
+                Check(hotkey.TryChange(f12, out error) && hotkey.Shortcut == "Ctrl+F12", "F12 modifier combination supported");
+                Check(hotkey.SetRecording(true).Length == 0, "F12 recording suspends hook");
+                using (F12Listener released = new F12Listener(delegate { }, 2))
+                    Check(released.Available, "F12 hook released during recording");
+                Check(hotkey.SetRecording(false).Length == 0 && hotkey.Shortcut == "Ctrl+F12", "F12 hook resumes after recording");
+                Check(hotkey.TryChange(first, out error), "switch F12 back to ordinary chord");
+                Console.WriteLine("Registration tests passed (no simulated keyboard input).");
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+            finally { if (hotkey != null) hotkey.Dispose(); window.Close(); }
         }
 
         private static void SendKey(ushort key, uint flags)

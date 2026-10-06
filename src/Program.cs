@@ -70,6 +70,8 @@ namespace NihongoDeskMemo
     {
         public int RefreshSeconds { get; set; }
         public int HideHotkey { get; set; }
+        public int HideHotkeyVirtualKey { get; set; }
+        public int HideHotkeyModifiers { get; set; }
         public int RevealSeconds { get; set; }
         public bool AlwaysOnTop { get; set; }
         public int OpacityPercent { get; set; }
