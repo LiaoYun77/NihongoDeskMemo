@@ -159,6 +159,7 @@ namespace NihongoDeskMemoWpf
         private readonly CheckBox revealBox;
         private readonly CheckBox ratingButtonsBox;
         private readonly ComboBox modeBox;
+        private readonly ComboBox studyModeBox;
         private readonly HotkeyRecorder hideHotkeyBox;
         public Func<HotkeyGesture, string> ApplyHideHotkey { get; set; }
         public Func<bool, string> RecordingChanged { get; set; }
@@ -187,7 +188,7 @@ namespace NihongoDeskMemoWpf
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             int i;
-            for (i = 0; i < 9; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 6 ? GridLength.Auto : new GridLength(41) });
+            for (i = 0; i < 10; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 7 ? GridLength.Auto : new GridLength(41) });
             Body.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10) });
 
@@ -210,14 +211,14 @@ namespace NihongoDeskMemoWpf
             modeBox.Items.Add("假名回忆汉字");
             modeBox.Items.Add("汉字回忆读音");
             modeBox.SelectedIndex = Math.Max(0, Math.Min(3, config.ReviewMode));
-            AddRow(form, "抽题方向", modeBox, 5);
+            AddRow(form, "抽题方向", modeBox, 6);
 
             unitSelection = new UnitSelectionControl(config, database);
-            AddRow(form, "练习单元", unitSelection, 6);
+            AddRow(form, "练习单元", unitSelection, 7);
 
             countText = UiLabel(string.Empty);
             UpdateCount();
-            AddRow(form, "词库", countText, 7);
+            AddRow(form, "词库", countText, 8);
 
             hideHotkeyBox = new HotkeyRecorder(HotkeyGesture.FromConfig(config));
             hideHotkeyBox.RecordingChanged = delegate(bool recording)
@@ -225,7 +226,12 @@ namespace NihongoDeskMemoWpf
                 return RecordingChanged == null ? string.Empty : RecordingChanged(recording);
             };
             Closed += delegate { hideHotkeyBox.EndRecording(); };
-            AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 8);
+            AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 9);
+            studyModeBox = UiComboBox();
+            studyModeBox.Items.Add("到期复习");
+            studyModeBox.Items.Add("浏览（不计评级）");
+            studyModeBox.SelectedIndex = config.StudyMode == 1 ? 1 : 0;
+            AddRow(form, "学习方式", studyModeBox, 5);
 
             StackPanel actions = new StackPanel();
             actions.Orientation = Orientation.Horizontal;
@@ -338,6 +344,7 @@ namespace NihongoDeskMemoWpf
             config.HideMeaningUntilClick = revealBox.IsChecked == true;
             config.ShowRatingButtons = ratingButtonsBox.IsChecked == true;
             config.ReviewMode = Math.Max(0, modeBox.SelectedIndex);
+            config.StudyMode = studyModeBox.SelectedIndex == 1 ? 1 : 0;
             PracticeScope.SetUnits(config, unitSelection.IsAll ? new List<string>() : selected);
             return true;
         }

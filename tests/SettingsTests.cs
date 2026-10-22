@@ -68,7 +68,9 @@ namespace NihongoDeskMemoWpf
                 Check(!(bool)save.Invoke(window, saveArgs) && config.HideHotkey == 10, "failed registration does not save selected key");
                 string applied = string.Empty;
                 window.ApplyHideHotkey = delegate(HotkeyGesture key) { applied = key.DisplayName; return string.Empty; };
+                ((ComboBox)Field(window, "studyModeBox")).SelectedIndex = 1;
                 Check((bool)save.Invoke(window, saveArgs) && HotkeyGesture.FromConfig(config).DisplayName == "Ctrl+Alt+Q" && applied == "Ctrl+Alt+Q", "save applies and stores custom chord");
+                Check(config.StudyMode == 1, "study mode saved independently of question direction");
                 window.Close();
 
                 MemoWindow main = new MemoWindow { Left = 0, Top = 0 };
@@ -82,6 +84,7 @@ namespace NihongoDeskMemoWpf
                     data.Words.Add(new WordItem { Japanese = "three", Unit = "C" });
                     PracticeScope.SetUnits(appConfig, new string[] { "A", "C" });
                     appConfig.ReviewMode = 0;
+                    appConfig.StudyMode = 0;
                     HashSet<string> seen = new HashSet<string>();
                     MethodInfo pick = typeof(MemoWindow).GetMethod("PickDueWord", BindingFlags.NonPublic | BindingFlags.Instance);
                     for (int i = 0; i < 300; i++)

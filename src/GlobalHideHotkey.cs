@@ -121,7 +121,7 @@ namespace NihongoDeskMemoWpf
             return IntPtr.Zero;
         }
 
-        private void Toggle()
+        public void Toggle()
         {
             if (IsHidden)
             {

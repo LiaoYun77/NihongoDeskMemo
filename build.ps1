@@ -22,7 +22,8 @@ $references = @('System', 'System.Core', 'System.Drawing', 'System.Windows.Forms
 $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml') |
     ForEach-Object { '/reference:' + (Join-Path $referenceRoot ($_ + '.dll')) }
 $sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs',
-    'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs', 'HotkeyGesture.cs', 'HotkeyRecorder.cs') |
+    'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs', 'HotkeyGesture.cs', 'HotkeyRecorder.cs',
+    'StudySession.cs', 'XmlFileStore.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)
@@ -50,6 +51,14 @@ if ($RunTests -or $IncludeDesktopTests) {
     Compile 'exe' 'NihongoDeskMemoWpf.SettingsTests' $settingsTest ($sources + (Join-Path $root 'tests\SettingsTests.cs'))
     & $settingsTest
     if ($LASTEXITCODE -ne 0) { throw 'Settings tests failed.' }
+    $studyTest = Join-Path $testOutput 'StudyTests.exe'
+    Compile 'exe' 'NihongoDeskMemoWpf.StudyTests' $studyTest ($sources + (Join-Path $root 'tests\StudyTests.cs'))
+    & $studyTest
+    if ($LASTEXITCODE -ne 0) { throw 'Study/storage tests failed.' }
+    $workflowTest = Join-Path $testOutput 'WorkflowTests.exe'
+    Compile 'exe' 'NihongoDeskMemoWpf.WorkflowTests' $workflowTest ($sources + (Join-Path $root 'tests\WorkflowTests.cs'))
+    & $workflowTest
+    if ($LASTEXITCODE -ne 0) { throw 'Desktop workflow tests failed.' }
     if ($IncludeDesktopTests) {
         Write-Host 'Desktop tests temporarily register/send F10-F12 and Ctrl+Shift+Q. Close running copies first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'

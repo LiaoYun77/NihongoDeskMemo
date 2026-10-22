@@ -15,12 +15,12 @@ namespace NihongoDeskMemoWpf
     {
         public static bool ShouldShowRatingButtons(NihongoDeskMemo.AppConfig config, bool answerVisible)
         {
-            return config.ShowRatingButtons && answerVisible;
+            return config.StudyMode == 0 && config.ShowRatingButtons && answerVisible;
         }
 
         public static bool CanRateWithKeyboard(NihongoDeskMemo.AppConfig config, bool answerVisible)
         {
-            return config.ShowRatingButtons && answerVisible;
+            return config.StudyMode == 0 && config.ShowRatingButtons && answerVisible;
         }
     }
 
@@ -29,9 +29,22 @@ namespace NihongoDeskMemoWpf
         [STAThread]
         private static void Main()
         {
-            System.Windows.Application app = new System.Windows.Application();
-            app.ShutdownMode = ShutdownMode.OnMainWindowClose;
-            app.Run(new MemoWindow());
+            string instanceName;
+            using (System.Security.Cryptography.SHA256 hash = System.Security.Cryptography.SHA256.Create())
+                instanceName = "Local\\NihongoDeskMemo." + BitConverter.ToString(hash.ComputeHash(
+                    System.Text.Encoding.UTF8.GetBytes(NihongoDeskMemo.Storage.AppDirectory.ToUpperInvariant()))).Replace("-", "");
+            using (System.Threading.Mutex instance = new System.Threading.Mutex(false, instanceName))
+            {
+                bool acquired;
+                try { acquired = instance.WaitOne(0); }
+                catch (System.Threading.AbandonedMutexException) { acquired = true; }
+                if (!acquired) { MessageBox.Show("软件已在运行，请从托盘打开。", "Nihongo Desk Memo"); return; }
+                System.Windows.Application app = new System.Windows.Application();
+                app.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                try { app.Run(new MemoWindow()); }
+                catch (Exception ex) { MessageBox.Show("启动失败：" + ex.Message, "Nihongo Desk Memo"); }
+                finally { instance.ReleaseMutex(); }
+            }
         }
     }
 
@@ -43,12 +56,22 @@ namespace NihongoDeskMemoWpf
         private readonly DispatcherTimer timer = new DispatcherTimer();
         private readonly DispatcherTimer chromeHideTimer = new DispatcherTimer();
         private GlobalHideHotkey globalHideHotkey;
-        private bool resumeTimerAfterHide;
+        private bool userPaused;
+        private int modalDepth;
+        private bool menuOpen;
+        private bool closing;
+        private readonly StudySession study;
+        private readonly Stack<NihongoDeskMemo.WordItem> previousWords = new Stack<NihongoDeskMemo.WordItem>();
+        private ReviewSnapshot lastReview;
+        private System.Windows.Forms.NotifyIcon trayIcon;
+        private Button pauseButton, previousButton, undoButton;
+        private MenuItem pauseMenu, browseMenu, reviewMenu, undoMenu;
         private Button hideButton;
 
         private readonly Border surface;
         private readonly Border questionPanel;
         private Grid headerPanel;
+        private UniformGrid navigationPanel;
         private TextBlock statusText;
         private readonly TextBlock questionText;
         private readonly TextBlock answerLine1;
@@ -60,6 +83,7 @@ namespace NihongoDeskMemoWpf
 
         private NihongoDeskMemo.WordItem currentWord;
         private bool answerVisible;
+        private bool viewingHistory;
         private bool pseudoHidden;
         private bool chromePinned;
         private Rect normalBounds;
@@ -68,12 +92,14 @@ namespace NihongoDeskMemoWpf
         {
             database = NihongoDeskMemo.Storage.LoadDatabase();
             config = NihongoDeskMemo.Storage.LoadConfig();
+            study = new StudySession(random);
+            if (config.StudyMode != 1) config.StudyMode = 0;
 
             Title = "Nihongo Desk Memo v" + AppVersion.Number;
             Width = Math.Max(300, config.WindowWidth);
-            Height = Math.Max(250, config.WindowHeight);
-            MinWidth = 280;
-            MinHeight = 230;
+            Height = Math.Max(280, config.WindowHeight);
+            MinWidth = 300;
+            MinHeight = 280;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;
@@ -83,6 +109,7 @@ namespace NihongoDeskMemoWpf
             KeyDown += WindowKeyDown;
             Loaded += WindowLoaded;
             Closed += WindowClosed;
+            IsKeyboardFocusWithinChanged += delegate { UpdateRefreshState(); };
 
             Grid root = new Grid();
             Content = root;
@@ -95,13 +122,15 @@ namespace NihongoDeskMemoWpf
             surface.MouseLeftButtonDown += SurfaceMouseLeftButtonDown;
             surface.MouseEnter += SurfaceMouseEnter;
             surface.MouseLeave += SurfaceMouseLeave;
+            ContextMenu = BuildAccessMenu();
             root.Children.Add(surface);
 
             normalContent = new Grid();
             normalContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
             normalContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            normalContent.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            normalContent.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            normalContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(94) });
+            normalContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) });
+            normalContent.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });
             surface.Child = normalContent;
 
             Grid header = BuildHeader();
@@ -127,7 +156,8 @@ namespace NihongoDeskMemoWpf
             questionText.TextWrapping = TextWrapping.Wrap;
             questionText.VerticalAlignment = VerticalAlignment.Center;
             questionText.Effect = TextShadow(4, 0.95);
-            questionPanel.Child = questionText;
+            questionPanel.Child = new ScrollViewer { Content = questionText, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
             answerPanel = new Border();
             answerPanel.Background = Brush("#C924313F");
@@ -139,14 +169,21 @@ namespace NihongoDeskMemoWpf
             Grid.SetRow(answerPanel, 2);
             normalContent.Children.Add(answerPanel);
 
-            StackPanel answerStack = new StackPanel();
+            Grid answerStack = new Grid();
+            answerStack.RowDefinitions.Add(new RowDefinition());
+            answerStack.RowDefinitions.Add(new RowDefinition());
             answerPanel.Child = answerStack;
             answerLine1 = AnswerText(15, "#FFE2E8F0");
             answerLine2 = AnswerText(16, "#FFFFFFFF");
             answerLine1.Effect = TextShadow(3, 0.9);
             answerLine2.Effect = TextShadow(3, 0.9);
-            answerStack.Children.Add(answerLine1);
-            answerStack.Children.Add(answerLine2);
+            ScrollViewer readingScroll = new ScrollViewer { Content = answerLine1, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            ScrollViewer meaningScroll = new ScrollViewer { Content = answerLine2, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            Grid.SetRow(meaningScroll, 1);
+            answerStack.Children.Add(readingScroll);
+            answerStack.Children.Add(meaningScroll);
 
             ratingGrid = new UniformGrid();
             ratingGrid.Rows = 1;
@@ -158,6 +195,26 @@ namespace NihongoDeskMemoWpf
             ratingGrid.Children.Add(RatingButton("熟练\n4", "#FF3976A8", 4));
             Grid.SetRow(ratingGrid, 3);
             normalContent.Children.Add(ratingGrid);
+
+            UniformGrid navigation = new UniformGrid { Columns = 4, Rows = 1 };
+            navigationPanel = navigation;
+            previousButton = ToolButton("←");
+            previousButton.ToolTip = "上一词";
+            previousButton.Click += PreviousClick;
+            navigation.Children.Add(previousButton);
+            Button next = ToolButton("→");
+            next.ToolTip = "下一词（不计评级）";
+            next.Click += delegate { ShowNextWord(); };
+            navigation.Children.Add(next);
+            undoButton = ToolButton("↶");
+            undoButton.ToolTip = "撤销上次评级";
+            undoButton.Click += UndoClick;
+            navigation.Children.Add(undoButton);
+            pauseButton = ToolButton("暂停");
+            pauseButton.Click += delegate { TogglePause(); };
+            navigation.Children.Add(pauseButton);
+            Grid.SetRow(navigation, 4);
+            normalContent.Children.Add(navigation);
 
             showButton = ToolButton("显示");
             showButton.Visibility = Visibility.Collapsed;
@@ -240,6 +297,21 @@ namespace NihongoDeskMemoWpf
             button.Padding = new Thickness(8, 3, 8, 3);
             button.Margin = new Thickness(3, 0, 0, 0);
             button.Cursor = Cursors.Hand;
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory border = new FrameworkElementFactory(typeof(Border));
+            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            FrameworkElementFactory content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            border.AppendChild(content);
+            template.VisualTree = border;
+            Trigger disabled = new Trigger { Property = IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(OpacityProperty, 0.35));
+            template.Triggers.Add(disabled);
+            button.Template = template;
             return button;
         }
 
@@ -282,6 +354,7 @@ namespace NihongoDeskMemoWpf
             RestoreLocation();
             ApplyConfig();
             ShowNextWord();
+            CreateTrayIcon();
             HotkeyGesture shortcut = HotkeyGesture.FromConfig(config);
             globalHideHotkey = new GlobalHideHotkey(this, shortcut);
             globalHideHotkey.VisibilityChanged += GlobalVisibilityChanged;
@@ -290,6 +363,8 @@ namespace NihongoDeskMemoWpf
                 MessageBox.Show(this, shortcut.DisplayName + " 已被占用，本次全局隐藏 / 恢复改为 " + globalHideHotkey.Shortcut + "。", "快捷键提示");
             else if (globalHideHotkey.Shortcut.Length == 0)
                 MessageBox.Show(this, shortcut.DisplayName + " 全局隐藏快捷键启用失败。\n请在设置中选择其他按键，或关闭占用快捷键的程序。", "快捷键不可用");
+            if (NihongoDeskMemo.XmlFileStore.RecoveryMessage.Length > 0)
+                MessageBox.Show(this, NihongoDeskMemo.XmlFileStore.RecoveryMessage, "数据已恢复");
         }
 
         private void UpdateHideShortcutTip()
@@ -301,17 +376,9 @@ namespace NihongoDeskMemoWpf
 
         private void GlobalVisibilityChanged(object sender, EventArgs e)
         {
-            if (globalHideHotkey.IsHidden)
-            {
-                resumeTimerAfterHide = timer.IsEnabled;
-                timer.Stop();
-                chromeHideTimer.Stop();
-            }
-            else
-            {
-                if (resumeTimerAfterHide) timer.Start();
-                if (config.BackgroundTransparent && !pseudoHidden) ShowChromeTemporarily();
-            }
+            if (globalHideHotkey.IsHidden) chromeHideTimer.Stop();
+            else if (config.BackgroundTransparent && !pseudoHidden) ShowChromeTemporarily();
+            UpdateRefreshState();
         }
 
         private void RestoreLocation()
@@ -331,7 +398,7 @@ namespace NihongoDeskMemoWpf
         {
             Topmost = config.AlwaysOnTop;
             timer.Interval = TimeSpan.FromSeconds(Math.Max(3, config.RefreshSeconds));
-            timer.Start();
+            UpdateRefreshState();
             ApplyAppearance();
         }
 
@@ -351,17 +418,19 @@ namespace NihongoDeskMemoWpf
                 surface.BorderBrush = Brush("#667C8DA3");
                 questionPanel.Background = Brush("#5A111827");
                 answerPanel.Background = Brush("#C924313F");
-                headerPanel.Opacity = 1.0;
+                SetChromeOpacity(1);
             }
         }
 
         private void SurfaceMouseEnter(object sender, MouseEventArgs e)
         {
+            UpdateRefreshState();
             if (config.BackgroundTransparent && !pseudoHidden) ShowChromeTemporarily();
         }
 
         private void SurfaceMouseLeave(object sender, MouseEventArgs e)
         {
+            UpdateRefreshState();
             if (config.BackgroundTransparent && !pseudoHidden && !chromePinned)
             {
                 chromeHideTimer.Stop();
@@ -371,7 +440,7 @@ namespace NihongoDeskMemoWpf
 
         private void ShowChromeTemporarily()
         {
-            headerPanel.Opacity = 1.0;
+            SetChromeOpacity(1);
             chromeHideTimer.Stop();
             if (!chromePinned) chromeHideTimer.Start();
         }
@@ -379,15 +448,37 @@ namespace NihongoDeskMemoWpf
         private void ChromeHideTimerTick(object sender, EventArgs e)
         {
             chromeHideTimer.Stop();
-            if (config.BackgroundTransparent && !chromePinned && !headerPanel.IsMouseOver)
+            if (config.BackgroundTransparent && !chromePinned && !IsMouseOver && !menuOpen)
             {
-                headerPanel.Opacity = 0.0;
+                SetChromeOpacity(0);
+            }
+        }
+
+        private void SetChromeOpacity(double value)
+        {
+            headerPanel.Opacity = value;
+            headerPanel.IsHitTestVisible = value > 0;
+            if (navigationPanel != null)
+            {
+                navigationPanel.Opacity = value;
+                navigationPanel.IsHitTestVisible = value > 0;
             }
         }
 
         private void ShowNextWord()
         {
+            if (currentWord != null)
+            {
+                if (previousWords.Count >= 100)
+                {
+                    NihongoDeskMemo.WordItem[] history = previousWords.ToArray();
+                    previousWords.Clear();
+                    for (int i = 98; i >= 0; i--) previousWords.Push(history[i]);
+                }
+                previousWords.Push(currentWord);
+            }
             currentWord = PickDueWord();
+            viewingHistory = false;
             if (database.Words.Count == 0)
             {
                 ShowEmpty("暂无词条", "请在设置中导入词表");
@@ -403,14 +494,20 @@ namespace NihongoDeskMemoWpf
                 return;
             }
 
-            currentWord.SeenCount++;
-            currentWord.LastSeenUtc = DateTime.UtcNow.ToString("o");
-            answerVisible = !config.HideMeaningUntilClick;
+            DisplayCurrentWord(false);
+        }
+
+        private void DisplayCurrentWord(bool revealed)
+        {
+            if (currentWord == null) return;
+            answerVisible = revealed || !config.HideMeaningUntilClick;
             ApplyReviewDisplay();
-            statusText.Text = ModeName() + "  ·  " +
+            statusText.Text = (config.StudyMode == 1 ? "浏览" : "复习") + " · " + ModeName() + "  ·  " +
                 PracticeScope.Summary(config) +
                 "  ·  复习 " + currentWord.ReviewCount.ToString();
             UpdateAnswerState();
+            timer.Stop();
+            UpdateRefreshState();
         }
 
         private void ShowEmpty(string title, string message)
@@ -421,8 +518,12 @@ namespace NihongoDeskMemoWpf
             answerLine1.Text = message;
             answerLine2.Text = string.Empty;
             answerPanel.Visibility = Visibility.Visible;
-            ratingGrid.Visibility = Visibility.Collapsed;
+            answerLine1.Visibility = Visibility.Visible;
+            answerLine2.Visibility = Visibility.Hidden;
+            ratingGrid.Visibility = Visibility.Hidden;
             statusText.Text = PracticeScope.Summary(config);
+            UpdateNavigation();
+            UpdateRefreshState();
         }
 
         private void ApplyReviewDisplay()
@@ -456,12 +557,17 @@ namespace NihongoDeskMemoWpf
         private void UpdateAnswerState()
         {
             bool readingAlwaysVisible = config.ReviewMode == 0;
-            answerPanel.Visibility = answerVisible || readingAlwaysVisible ? Visibility.Visible : Visibility.Collapsed;
-            answerLine1.Visibility = answerVisible || readingAlwaysVisible ? Visibility.Visible : Visibility.Collapsed;
-            answerLine2.Visibility = answerVisible ? Visibility.Visible : Visibility.Collapsed;
-            ratingGrid.Visibility = ReviewPresentation.ShouldShowRatingButtons(config, answerVisible)
+            answerPanel.Visibility = Visibility.Visible;
+            answerLine1.Visibility = answerVisible || readingAlwaysVisible ? Visibility.Visible : Visibility.Hidden;
+            answerLine2.Visibility = answerVisible ? Visibility.Visible : Visibility.Hidden;
+            ratingGrid.Visibility = !viewingHistory && ReviewPresentation.ShouldShowRatingButtons(config, answerVisible)
                 ? Visibility.Visible
-                : Visibility.Collapsed;
+                : Visibility.Hidden;
+            questionText.ToolTip = questionText.Text;
+            answerLine1.ToolTip = answerLine1.Text;
+            answerLine2.ToolTip = answerLine2.Text;
+            UpdateNavigation();
+            UpdateRefreshState();
         }
 
         private void RevealAnswer()
@@ -476,24 +582,7 @@ namespace NihongoDeskMemoWpf
 
         private NihongoDeskMemo.WordItem PickDueWord()
         {
-            List<NihongoDeskMemo.WordItem> candidates = new List<NihongoDeskMemo.WordItem>();
-            int total = 0;
-            int i;
-            for (i = 0; i < database.Words.Count; i++)
-            {
-                NihongoDeskMemo.WordItem item = database.Words[i];
-                if (!InPracticeUnit(item) || !EligibleForMode(item) || !IsDue(item)) continue;
-                candidates.Add(item);
-                total += Math.Max(1, Convert.ToInt32(Math.Round(item.Difficulty * 2.0)));
-            }
-            if (candidates.Count == 0) return null;
-            int roll = random.Next(total);
-            for (i = 0; i < candidates.Count; i++)
-            {
-                roll -= Math.Max(1, Convert.ToInt32(Math.Round(candidates[i].Difficulty * 2.0)));
-                if (roll < 0) return candidates[i];
-            }
-            return candidates[0];
+            return study.Next(database, config);
         }
 
         private bool InPracticeUnit(NihongoDeskMemo.WordItem item)
@@ -549,46 +638,197 @@ namespace NihongoDeskMemoWpf
 
         private void Rate(int rating)
         {
-            if (currentWord == null || !ReviewPresentation.CanRateWithKeyboard(config, answerVisible)) return;
-            DateTime now = DateTime.UtcNow;
-            currentWord.LastReviewTime = now.ToString("o");
-            currentWord.ReviewCount++;
-            if (rating == 1)
-            {
-                currentWord.WrongCount++;
-                currentWord.CorrectStreak = 0;
-                currentWord.Difficulty = Math.Min(10.0, currentWord.Difficulty + 1.0);
-                currentWord.IntervalDays = 0;
-                currentWord.NextReviewTime = now.AddMinutes(5).ToString("o");
-                currentWord.Marked = true;
-            }
-            else if (rating == 2)
-            {
-                currentWord.CorrectStreak = 0;
-                currentWord.Difficulty = Math.Min(10.0, currentWord.Difficulty + 0.3);
-                currentWord.IntervalDays = 1;
-                currentWord.NextReviewTime = now.AddDays(1).ToString("o");
-            }
-            else
-            {
-                currentWord.CorrectStreak++;
-                currentWord.Difficulty = Math.Max(1.0, currentWord.Difficulty - (rating == 4 ? 0.5 : 0.25));
-                currentWord.IntervalDays = NextCorrectInterval(currentWord.IntervalDays, rating == 4 ? 7 : 3);
-                currentWord.NextReviewTime = now.AddDays(currentWord.IntervalDays).ToString("o");
-            }
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            if (currentWord == null || viewingHistory || !ReviewPresentation.CanRateWithKeyboard(config, answerVisible)) return;
+            ReviewSnapshot before = new ReviewSnapshot(currentWord);
+            ReviewActions.Rate(currentWord, rating, DateTime.UtcNow);
+            try { NihongoDeskMemo.Storage.SaveDatabase(database); }
+            catch (Exception ex) { before.Restore(); MessageBox.Show(this, "评级未保存：" + ex.Message, "保存失败"); return; }
+            lastReview = before;
             ShowNextWord();
         }
 
-        private static int NextCorrectInterval(int currentDays, int minimumDays)
+        private void PreviousClick(object sender, RoutedEventArgs e)
         {
-            int[] intervals = new int[] { 3, 7, 15, 30, 60 };
-            int i;
-            for (i = 0; i < intervals.Length; i++)
+            while (previousWords.Count > 0)
             {
-                if (intervals[i] >= minimumDays && intervals[i] > currentDays) return intervals[i];
+                NihongoDeskMemo.WordItem previous = previousWords.Pop();
+                if (!database.Words.Contains(previous) || !InPracticeUnit(previous) || !EligibleForMode(previous)) continue;
+                currentWord = previous;
+                viewingHistory = true;
+                DisplayCurrentWord(true);
+                return;
             }
-            return 60;
+            UpdateNavigation();
+        }
+
+        private void UndoClick(object sender, RoutedEventArgs e)
+        {
+            if (lastReview == null || !database.Words.Contains(lastReview.Word)) return;
+            ReviewSnapshot after = new ReviewSnapshot(lastReview.Word);
+            lastReview.Restore();
+            try { NihongoDeskMemo.Storage.SaveDatabase(database); }
+            catch (Exception ex) { after.Restore(); MessageBox.Show(this, "撤销未保存：" + ex.Message, "保存失败"); return; }
+            currentWord = lastReview.Word;
+            lastReview = null;
+            viewingHistory = false;
+            if (previousWords.Count > 0 && object.ReferenceEquals(previousWords.Peek(), currentWord)) previousWords.Pop();
+            study.Reset();
+            DisplayCurrentWord(true);
+        }
+
+        private void UpdateNavigation()
+        {
+            previousButton.IsEnabled = previousWords.Count > 0;
+            undoButton.IsEnabled = lastReview != null && database.Words.Contains(lastReview.Word);
+            if (undoMenu != null) undoMenu.IsEnabled = undoButton.IsEnabled;
+            pauseButton.Content = userPaused ? "继续" : "暂停";
+            if (pauseMenu != null) pauseMenu.IsChecked = userPaused;
+            if (browseMenu != null) browseMenu.IsChecked = config.StudyMode == 1;
+            if (reviewMenu != null) reviewMenu.IsChecked = config.StudyMode == 0;
+        }
+
+        private void TogglePause() { userPaused = !userPaused; UpdateNavigation(); UpdateRefreshState(); }
+
+        private bool ShouldPauseRefresh()
+        {
+            return closing || userPaused || pseudoHidden || menuOpen || modalDepth > 0 || IsMouseOver || IsMouseCaptureWithin ||
+                (globalHideHotkey != null && globalHideHotkey.IsHidden) ||
+                (currentWord != null && !viewingHistory && ReviewPresentation.ShouldShowRatingButtons(config, answerVisible));
+        }
+
+        private void UpdateRefreshState()
+        {
+            if (ShouldPauseRefresh()) timer.Stop();
+            else if (!timer.IsEnabled) timer.Start();
+        }
+
+        private void WithDialog(Action action)
+        {
+            modalDepth++;
+            UpdateRefreshState();
+            try { action(); }
+            finally { modalDepth--; UpdateRefreshState(); }
+        }
+
+        private void SetStudyMode(int value)
+        {
+            if (ActivateExistingDialog()) return;
+            if (config.StudyMode == value) return;
+            int old = config.StudyMode;
+            config.StudyMode = value;
+            try { NihongoDeskMemo.Storage.SaveConfig(config); }
+            catch (Exception ex) { config.StudyMode = old; MessageBox.Show(this, ex.Message, "设置未保存"); return; }
+            ResetSession();
+            ShowNextWord();
+        }
+
+        private void ResetSession()
+        {
+            study.Reset(); previousWords.Clear(); lastReview = null; currentWord = null;
+        }
+
+        private ContextMenu BuildAccessMenu()
+        {
+            ContextMenu menu = new ContextMenu();
+            menu.Opened += delegate { menuOpen = true; UpdateNavigation(); UpdateRefreshState(); };
+            menu.Closed += delegate { menuOpen = false; UpdateRefreshState(); };
+            AddMenu(menu, "显示窗口", ShowMainWindow);
+            pauseMenu = AddMenu(menu, "暂停自动换词", TogglePause);
+            pauseMenu.IsCheckable = true;
+            menu.Items.Add(new Separator());
+            browseMenu = AddMenu(menu, "浏览模式", delegate { SetStudyMode(1); });
+            reviewMenu = AddMenu(menu, "到期复习", delegate { SetStudyMode(0); });
+            AddMenu(menu, "上一词", delegate { PreviousClick(this, new RoutedEventArgs()); });
+            AddMenu(menu, "下一词", ShowNextWord);
+            undoMenu = AddMenu(menu, "撤销上次评级", delegate { UndoClick(this, new RoutedEventArgs()); });
+            menu.Items.Add(new Separator());
+            AddMenu(menu, "词库管理", delegate { LibraryClick(this, new RoutedEventArgs()); });
+            AddMenu(menu, "设置", delegate { SettingsClick(this, new RoutedEventArgs()); });
+            AddMenu(menu, "备份词库", BackupWords);
+            AddMenu(menu, "从备份恢复", RestoreWords);
+            menu.Items.Add(new Separator());
+            AddMenu(menu, "退出", Close);
+            return menu;
+        }
+
+        private static MenuItem AddMenu(ContextMenu menu, string text, Action action)
+        {
+            MenuItem item = new MenuItem { Header = text };
+            item.Click += delegate { action(); };
+            menu.Items.Add(item);
+            return item;
+        }
+
+        private void ShowMainWindow()
+        {
+            if (globalHideHotkey != null && globalHideHotkey.IsHidden) globalHideHotkey.Toggle();
+            if (pseudoHidden) ShowClick(this, new RoutedEventArgs());
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+            chromePinned = true;
+            ShowChromeTemporarily();
+        }
+
+        private void CreateTrayIcon()
+        {
+            if (trayIcon != null) return;
+            trayIcon = new System.Windows.Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Information,
+                Text = "Nihongo Desk Memo", Visible = true };
+            System.Windows.Forms.ContextMenuStrip menu = new System.Windows.Forms.ContextMenuStrip();
+            menu.Opening += delegate { menuOpen = true; UpdateRefreshState(); };
+            menu.Closed += delegate { menuOpen = false; UpdateRefreshState(); };
+            AddTrayMenu(menu, "显示窗口", ShowMainWindow);
+            AddTrayMenu(menu, "暂停 / 继续自动换词", TogglePause);
+            AddTrayMenu(menu, "浏览模式", delegate { SetStudyMode(1); });
+            AddTrayMenu(menu, "到期复习", delegate { SetStudyMode(0); });
+            AddTrayMenu(menu, "设置", delegate { ShowMainWindow(); SettingsClick(this, new RoutedEventArgs()); });
+            AddTrayMenu(menu, "词库管理", delegate { ShowMainWindow(); LibraryClick(this, new RoutedEventArgs()); });
+            AddTrayMenu(menu, "备份词库", BackupWords);
+            AddTrayMenu(menu, "从备份恢复", RestoreWords);
+            AddTrayMenu(menu, "退出", Close);
+            trayIcon.ContextMenuStrip = menu;
+            trayIcon.DoubleClick += delegate { Dispatcher.BeginInvoke(new Action(ShowMainWindow)); };
+        }
+
+        private void AddTrayMenu(System.Windows.Forms.ContextMenuStrip menu, string text, Action action)
+        {
+            menu.Items.Add(text, null, delegate { Dispatcher.BeginInvoke(new Action(action)); });
+        }
+
+        private void BackupWords()
+        {
+            ShowMainWindow();
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate
+            {
+                try { NihongoDeskMemo.Storage.SaveDatabase(database); MessageBox.Show(this, NihongoDeskMemo.Storage.BackupDatabase(), "词库备份已创建"); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "备份失败"); }
+            });
+        }
+
+        private void RestoreWords()
+        {
+            ShowMainWindow();
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate
+            {
+                Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog { Title = "恢复词库备份", Filter = "词库备份|*.xml;*.bak" };
+                if (dialog.ShowDialog(this) != true) return;
+                try
+                {
+                    NihongoDeskMemo.WordDatabase restored = NihongoDeskMemo.XmlFileStore.Load<NihongoDeskMemo.WordDatabase>(dialog.FileName, null);
+                    if (restored == null || restored.Words == null) throw new InvalidOperationException("不是有效的词库备份。");
+                    if (MessageBox.Show(this, "恢复 " + restored.Words.Count + " 条词条及其复习进度？当前词库会先备份。", "确认恢复", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+                    NihongoDeskMemo.Storage.BackupDatabase();
+                    List<NihongoDeskMemo.WordItem> original = database.Words;
+                    database.Words = restored.Words;
+                    try { NihongoDeskMemo.Storage.SaveDatabase(database); }
+                    catch { database.Words = original; throw; }
+                    ResetSession(); ShowNextWord();
+                }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "恢复未完成"); }
+            });
         }
 
         private void WindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -596,7 +836,7 @@ namespace NihongoDeskMemoWpf
             if (e.Key == Key.F9)
             {
                 chromePinned = !chromePinned;
-                headerPanel.Opacity = chromePinned ? 1.0 : 0.0;
+                SetChromeOpacity(chromePinned ? 1 : 0);
                 chromeHideTimer.Stop();
                 e.Handled = true;
                 return;
@@ -652,57 +892,70 @@ namespace NihongoDeskMemoWpf
             if (!pseudoHidden)
             {
                 chromePinned = true;
-                headerPanel.Opacity = 1.0;
+                SetChromeOpacity(1);
                 chromeHideTimer.Stop();
-                e.Handled = true;
+                e.Handled = false;
             }
         }
 
         private void TimerTick(object sender, EventArgs e)
         {
-            if (globalHideHotkey != null && globalHideHotkey.IsHidden) return;
+            if (ShouldPauseRefresh()) { UpdateRefreshState(); return; }
             ShowNextWord();
         }
 
         private void LibraryClick(object sender, RoutedEventArgs e)
         {
-            WpfLibraryWindow form = new WpfLibraryWindow(database);
-            form.Owner = this;
-            form.ShowDialog();
-            NihongoDeskMemo.Storage.SaveDatabase(database);
-            ShowNextWord();
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate
+            {
+                try
+                {
+                    WpfLibraryWindow form = new WpfLibraryWindow(database);
+                    form.Owner = this;
+                    form.ShowDialog();
+                    NihongoDeskMemo.Storage.SaveDatabase(database);
+                    ResetSession(); ShowNextWord();
+                }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "词库未保存"); }
+            });
         }
 
         private void SettingsClick(object sender, RoutedEventArgs e)
         {
-            try
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate
             {
-                WpfSettingsWindow form = new WpfSettingsWindow(
-                    config,
-                    database,
-                    ImportWords,
-                    OpenLibraryFromSettings,
-                    ResetReviewProgress);
-                form.Owner = this;
-                form.RecordingChanged = globalHideHotkey.SetRecording;
-                form.ApplyHideHotkey = delegate(HotkeyGesture key)
+                try
                 {
-                    string error;
-                    if (!globalHideHotkey.TryChange(key, out error)) return error;
+                    WpfSettingsWindow form = new WpfSettingsWindow(
+                        config, database, ImportWords, OpenLibraryFromSettings, ResetReviewProgress);
+                    form.Owner = this;
+                    form.RecordingChanged = globalHideHotkey.SetRecording;
+                    form.ApplyHideHotkey = delegate(HotkeyGesture key)
+                    {
+                        string error;
+                        if (!globalHideHotkey.TryChange(key, out error)) return error;
+                        UpdateHideShortcutTip();
+                        return string.Empty;
+                    };
+                    if (form.ShowDialog() == true)
+                    {
+                        NihongoDeskMemo.Storage.SaveConfig(config);
+                        ResetSession();
+                    }
                     UpdateHideShortcutTip();
-                    return string.Empty;
-                };
-                if (form.ShowDialog() == true) NihongoDeskMemo.Storage.SaveConfig(config);
-                UpdateHideShortcutTip();
-                if (globalHideHotkey.Shortcut.Length == 0)
-                    MessageBox.Show(this, "原快捷键恢复失败，请重新打开设置选择其他按键。", "快捷键不可用");
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(this, ex.ToString(), "设置窗口错误");
-            }
-            ApplyConfig();
-            ShowNextWord();
+                    if (globalHideHotkey.Shortcut.Length == 0)
+                        MessageBox.Show(this, "原快捷键恢复失败，请重新打开设置选择其他按键。", "快捷键不可用");
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show(this, ex.ToString(), "设置窗口错误");
+                }
+                ApplyConfig();
+                if (currentWord == null) ShowNextWord();
+                else DisplayCurrentWord(answerVisible);
+            });
         }
 
         private void ImportWords()
@@ -716,6 +969,7 @@ namespace NihongoDeskMemoWpf
                 string backup = NihongoDeskMemo.Storage.BackupDatabase();
                 NihongoDeskMemo.ImportResult result = NihongoDeskMemo.WordImporter.ImportFile(dialog.FileName, database);
                 NihongoDeskMemo.Storage.SaveDatabase(database);
+                ResetSession(); ShowNextWord();
                 System.Windows.MessageBox.Show(
                     "新增 " + result.Added + " 条，更新 " + result.Updated + " 条，已存在 " + result.Unchanged +
                     " 条，跳过 " + result.Skipped + " 行。" +
@@ -728,11 +982,20 @@ namespace NihongoDeskMemoWpf
             }
         }
 
+        private bool ActivateExistingDialog()
+        {
+            if (modalDepth == 0) return false;
+            foreach (Window owned in OwnedWindows) if (owned.IsVisible) { owned.Activate(); break; }
+            return true;
+        }
+
         private void OpenLibraryFromSettings()
         {
             WpfLibraryWindow form = new WpfLibraryWindow(database);
             form.Owner = this;
             form.ShowDialog();
+            NihongoDeskMemo.Storage.SaveDatabase(database);
+            ResetSession(); ShowNextWord();
         }
 
         private void ResetReviewProgress()
@@ -752,6 +1015,7 @@ namespace NihongoDeskMemoWpf
                 item.IntervalDays = 0;
             }
             NihongoDeskMemo.Storage.SaveDatabase(database);
+            ResetSession(); ShowNextWord();
         }
 
         private void SurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -801,6 +1065,7 @@ namespace NihongoDeskMemoWpf
             Width = 76;
             Height = 34;
             surface.Padding = new Thickness(3);
+            UpdateRefreshState();
         }
 
         private void ShowClick(object sender, RoutedEventArgs e)
@@ -808,8 +1073,8 @@ namespace NihongoDeskMemoWpf
             pseudoHidden = false;
             normalContent.Visibility = Visibility.Visible;
             showButton.Visibility = Visibility.Collapsed;
-            MinWidth = 280;
-            MinHeight = 230;
+            MinWidth = 300;
+            MinHeight = 280;
             surface.Padding = new Thickness(12, 10, 12, 10);
             if (normalBounds.Width > 0)
             {
@@ -818,22 +1083,34 @@ namespace NihongoDeskMemoWpf
                 Width = normalBounds.Width;
                 Height = normalBounds.Height;
             }
+            UpdateRefreshState();
         }
 
         private void WindowClosed(object sender, EventArgs e)
         {
+            closing = true;
             if (globalHideHotkey != null) globalHideHotkey.Dispose();
+            if (trayIcon != null)
+            {
+                trayIcon.Visible = false;
+                if (trayIcon.ContextMenuStrip != null) trayIcon.ContextMenuStrip.Dispose();
+                trayIcon.Dispose();
+            }
             timer.Stop();
             chromeHideTimer.Stop();
             if (!pseudoHidden)
             {
-                config.WindowX = Convert.ToInt32(Left);
-                config.WindowY = Convert.ToInt32(Top);
+                config.WindowX = double.IsNaN(Left) ? -1 : Convert.ToInt32(Left);
+                config.WindowY = double.IsNaN(Top) ? -1 : Convert.ToInt32(Top);
                 config.WindowWidth = Convert.ToInt32(Width);
                 config.WindowHeight = Convert.ToInt32(Height);
             }
-            NihongoDeskMemo.Storage.SaveConfig(config);
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            try
+            {
+                NihongoDeskMemo.Storage.SaveConfig(config);
+                NihongoDeskMemo.Storage.SaveDatabase(database);
+            }
+            catch (Exception ex) { MessageBox.Show("退出前保存失败：" + ex.Message, "Nihongo Desk Memo"); }
         }
     }
 }

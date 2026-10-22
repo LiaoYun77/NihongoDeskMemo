@@ -10,6 +10,8 @@ obj/
 words.xml
 config.xml
 *.bak
+*.tmp
+*.damaged-*.xml
 *.log
 .env
 .env.*
