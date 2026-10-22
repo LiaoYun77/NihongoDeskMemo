@@ -80,6 +80,7 @@ namespace NihongoDeskMemo
         public bool ShowRatingButtons { get; set; }
         public string PracticeUnit { get; set; }
         public string[] PracticeUnits { get; set; }
+        public List<PracticePreset> PracticePresets { get; set; }
         public int ReviewMode { get; set; }
         public int StudyMode { get; set; }
         public int WindowX { get; set; }
@@ -98,6 +99,7 @@ namespace NihongoDeskMemo
             HideMeaningUntilClick = true;
             ShowRatingButtons = true;
             PracticeUnit = string.Empty;
+            PracticePresets = new List<PracticePreset>();
             ReviewMode = 0;
             WindowX = -1;
             WindowY = -1;

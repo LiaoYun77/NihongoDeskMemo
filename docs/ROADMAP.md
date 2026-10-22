@@ -3,7 +3,7 @@
 User-approved order, 2026-10-22. Each version is implemented and verified separately.
 Release publication is confirmed only after the GitHub release and assets exist.
 
-## v0.4.0 - Desktop Workflow (In Verification)
+## v0.4.0 - Desktop Workflow (Released)
 
 - [x] Fixed question, reading, meaning, rating and navigation regions.
 - [x] Tray and context-menu access to settings, library, pause and recovery.
@@ -12,15 +12,18 @@ Release publication is confirmed only after the GitHub release and assets exist.
 - [x] Previous word, next word, one-round repeat avoidance and undo last rating.
 - [x] Atomic XML saves, rolling backups, daily snapshots and corruption recovery.
 - [x] Configuration, storage, WPF workflow and real global-key regression tests.
-- [ ] PR, CI and release verification.
+- [x] PR, CI and release verification (PR #3, v0.4.0).
 
-## v0.5.0 - Library and Learning Records (Planned)
+## v0.5.0 - Library and Learning Records (In Development)
 
-- Named multi-unit practice presets.
-- Import preview with missing-field and duplicate checks before confirmation.
-- Stable word identities and individual review events.
-- Separate progress for recognition, recall and reading directions.
-- Compatibility and backup checks for existing XML data.
+- [x] Named multi-unit practice presets: create, update, rename, delete, apply.
+- [x] Draft-only settings edits, legacy config and missing-unit compatibility.
+- [ ] Import preview with missing-field and duplicate checks before confirmation.
+- [ ] Stable word identities and individual review events.
+- [ ] Separate progress for recognition, recall and reading directions.
+- [ ] Full-version compatibility, backup checks, PR, CI and release verification.
+
+The first slice is not the complete v0.5.0 release. See V0.5-SPEC.md.
 
 ## v0.6.0 - Japanese Learning Content (Planned)
 
