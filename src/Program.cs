@@ -81,6 +81,7 @@ namespace NihongoDeskMemo
         public string PracticeUnit { get; set; }
         public string[] PracticeUnits { get; set; }
         public int ReviewMode { get; set; }
+        public int StudyMode { get; set; }
         public int WindowX { get; set; }
         public int WindowY { get; set; }
         public int WindowWidth { get; set; }
@@ -271,45 +272,12 @@ namespace NihongoDeskMemo
 
         private static T LoadXml<T>(string path, T fallback)
         {
-            if (!File.Exists(path))
-            {
-                return fallback;
-            }
-
-            try
-            {
-                using (FileStream stream = File.OpenRead(path))
-                {
-                    XmlSerializer serializer = new XmlSerializer(typeof(T));
-                    object value = serializer.Deserialize(stream);
-                    if (value is T)
-                    {
-                        return (T)value;
-                    }
-                }
-            }
-            catch
-            {
-                return fallback;
-            }
-
-            return fallback;
+            return XmlFileStore.Load(path, fallback);
         }
 
         private static void SaveXml<T>(string path, T value)
         {
-            string tempPath = path + ".tmp";
-            using (FileStream stream = File.Create(tempPath))
-            {
-                XmlSerializer serializer = new XmlSerializer(typeof(T));
-                serializer.Serialize(stream, value);
-            }
-
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-            File.Move(tempPath, path);
+            XmlFileStore.Save(path, value);
         }
     }
 

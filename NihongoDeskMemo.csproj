@@ -42,6 +42,8 @@
     <Compile Include="src\GlobalHideHotkey.cs" />
     <Compile Include="src\HotkeyGesture.cs" />
     <Compile Include="src\HotkeyRecorder.cs" />
+    <Compile Include="src\StudySession.cs" />
+    <Compile Include="src\XmlFileStore.cs" />
     <Compile Include="src\StructuredWordImporter.cs" />
     <Compile Include="src\PracticeScope.cs" />
     <Compile Include="src\UnitSelectionControl.cs" />

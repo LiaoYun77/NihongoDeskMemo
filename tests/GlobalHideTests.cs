@@ -174,6 +174,14 @@ namespace NihongoDeskMemoWpf
             try
             {
                 NihongoDeskMemo.AppConfig config = (NihongoDeskMemo.AppConfig)Field(main, "config");
+                config.StudyMode = 0;
+                config.HideMeaningUntilClick = true;
+                config.ShowRatingButtons = true;
+                PracticeScope.SetUnits(config, new string[0]);
+                NihongoDeskMemo.WordDatabase data = (NihongoDeskMemo.WordDatabase)Field(main, "database");
+                data.Words.Clear();
+                data.Words.Add(new NihongoDeskMemo.WordItem { Japanese = "test", Pinyin = "てすと", Chinese = "测试" });
+                data.Words.Add(new NihongoDeskMemo.WordItem { Japanese = "word", Pinyin = "ことば", Chinese = "单词" });
                 HotkeyGesture.FunctionKey(12).SaveTo(config);
                 main.ShowActivated = false;
                 main.Show();
@@ -183,6 +191,8 @@ namespace NihongoDeskMemoWpf
                 DispatcherTimer timer = (DispatcherTimer)Field(main, "timer");
                 IntPtr handle = new WindowInteropHelper(main).Handle;
                 object word = Field(main, "currentWord");
+                Check(word != null, "integration test has a real study word");
+                Check(Field(main, "trayIcon") != null, "tray entry created for the real app");
                 Check(timer.IsEnabled, "app refresh initially running");
                 Press(hotkey.Shortcut);
                 Check(hotkey.IsHidden && !IsWindowVisible(handle), "real app hidden");
