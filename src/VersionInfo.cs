@@ -8,6 +8,6 @@ namespace NihongoDeskMemoWpf
 {
     internal static class AppVersion
     {
-        public const string Number = "0.4.0";
+        public const string Number = "0.4.1";
     }
 }

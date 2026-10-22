@@ -3,6 +3,8 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -28,6 +30,7 @@ namespace NihongoDeskMemoWpf
                 data.Words.Add(new WordItem { Japanese = "会社員", Pinyin = "かいしゃいん", Chinese = "公司职员", Unit = "第01课" });
                 data.Words.Add(new WordItem { Japanese = "会議", Pinyin = "かいぎ", Chinese = "会议", Unit = "第02课" });
                 Call(window, "ApplyConfig"); Call(window, "ShowNextWord");
+                CheckRevealClicks(window, config);
                 NihongoDeskMemo.WordItem first = (WordItem)Field(window, "currentWord");
                 FrameworkElement root = (FrameworkElement)window.Content;
                 Layout(root, 360, 330);
@@ -95,6 +98,48 @@ namespace NihongoDeskMemoWpf
 
         private static void Layout(FrameworkElement root, int width, int height)
         { root.Measure(new Size(width, height)); root.Arrange(new Rect(0, 0, width, height)); root.UpdateLayout(); }
+
+        private static void CheckRevealClicks(MemoWindow window, AppConfig config)
+        {
+            TextBlock question = (TextBlock)Field(window, "questionText");
+            TextBlock reading = (TextBlock)Field(window, "answerLine1");
+            for (int studyMode = 0; studyMode < 2; studyMode++)
+                for (int mode = 0; mode < 4; mode++)
+                    for (int transparent = 0; transparent < 2; transparent++)
+                    {
+                        config.StudyMode = studyMode; config.ReviewMode = mode;
+                        config.BackgroundTransparent = transparent == 1;
+                        Call(window, "ApplyAppearance");
+                        Call(window, "DisplayCurrentWord", false);
+                        RouteClick(question, true);
+                        Check((bool)Field(window, "answerVisible"), "handled text click reveals answer in every mode");
+                        if (mode == 0)
+                        {
+                            Call(window, "DisplayCurrentWord", false);
+                            RouteClick(reading, true);
+                            Check((bool)Field(window, "answerVisible"), "handled kana click reveals meaning");
+                        }
+                    }
+            config.StudyMode = 0; config.ReviewMode = 0; config.BackgroundTransparent = false;
+            Call(window, "ApplyAppearance"); Call(window, "DisplayCurrentWord", false);
+            Border panel = (Border)Field(window, "questionPanel");
+            ScrollViewer scroll = (ScrollViewer)panel.Child;
+            ScrollBar bar = new ScrollBar();
+            panel.Child = bar;
+            RouteClick(bar, true);
+            Check(!(bool)Field(window, "answerVisible"), "scrollbar click does not reveal answer");
+            panel.Child = scroll;
+            Call(window, "HideClick", window, new RoutedEventArgs());
+            RouteClick(question, true);
+            Check(!(bool)Field(window, "answerVisible"), "pseudo-hidden content does not reveal answer");
+            Call(window, "ShowClick", window, new RoutedEventArgs());
+        }
+
+        private static void RouteClick(UIElement target, bool handled)
+        {
+            target.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+                { RoutedEvent = Mouse.MouseDownEvent, Handled = handled });
+        }
 
         private static void Screenshot(FrameworkElement root, string path, int width, int height)
         {

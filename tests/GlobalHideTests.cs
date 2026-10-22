@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace NihongoDeskMemoWpf
@@ -17,6 +19,10 @@ namespace NihongoDeskMemoWpf
         [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
         [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hwnd, int id);
         [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
+        [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT point);
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
         [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint Type; public INPUTDATA Data; }
         [StructLayout(LayoutKind.Explicit)] private struct INPUTDATA
         {
@@ -32,6 +38,7 @@ namespace NihongoDeskMemoWpf
         private static void Main(string[] args)
         {
             if (args.Length > 0 && args[0] == "--app") { TestApp(); return; }
+            if (args.Length > 0 && args[0] == "--click") { TestAnswerClicks(); return; }
             if (args.Length > 0 && args[0] == "--registration") { TestRegistration(); return; }
             Window main = new Window { Title = "Global hide test", Width = 180, Height = 100,
                 ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000 };
@@ -159,14 +166,97 @@ namespace NihongoDeskMemoWpf
             Pump();
         }
 
-        private static void Pump()
+        private static void Pump(int milliseconds = 500)
         {
             DispatcherFrame frame = new DispatcherFrame();
-            DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
             timer.Tick += delegate { timer.Stop(); frame.Continue = false; };
             timer.Start();
             Dispatcher.PushFrame(frame);
         }
+
+        private static void TestAnswerClicks()
+        {
+            POINT cursor;
+            GetCursorPos(out cursor);
+            IntPtr foreground = GetForegroundWindow();
+            MemoWindow main = new MemoWindow();
+            try
+            {
+                NihongoDeskMemo.AppConfig config = (NihongoDeskMemo.AppConfig)Field(main, "config");
+                config.HideMeaningUntilClick = true; config.ShowRatingButtons = true;
+                config.WindowX = (int)SystemParameters.WorkArea.Left + 40;
+                config.WindowY = (int)SystemParameters.WorkArea.Top + 40;
+                HotkeyGesture.FunctionKey(12).SaveTo(config);
+                PracticeScope.SetUnits(config, new string[0]);
+                NihongoDeskMemo.WordDatabase data = (NihongoDeskMemo.WordDatabase)Field(main, "database");
+                data.Words.Clear();
+                data.Words.Add(new NihongoDeskMemo.WordItem { Japanese = "会社員", Pinyin = "かいしゃいん", Chinese = "公司职员" });
+                main.ShowInTaskbar = false;
+                main.Show(); main.Activate(); Pump();
+                Call(main, "TogglePause");
+                TextBlock question = (TextBlock)Field(main, "questionText");
+                TextBlock reading = (TextBlock)Field(main, "answerLine1");
+                TextBlock meaning = (TextBlock)Field(main, "answerLine2");
+                for (int studyMode = 0; studyMode < 2; studyMode++)
+                    for (int mode = 0; mode < 4; mode++)
+                        for (int transparent = 0; transparent < 2; transparent++)
+                        {
+                            config.StudyMode = studyMode; config.ReviewMode = mode;
+                            config.BackgroundTransparent = transparent == 1;
+                            Call(main, "ApplyAppearance"); Call(main, "DisplayCurrentWord", false); Pump(100);
+                            Point before = question.PointToScreen(new Point());
+                            ClickInk(question);
+                            Check((bool)Field(main, "answerVisible") && meaning.IsVisible,
+                                "native word click reveals answer: " + studyMode + "/" + mode + "/" + transparent);
+                            Check(before == question.PointToScreen(new Point()), "native reveal keeps word position");
+                            if (mode == 0)
+                            {
+                                Call(main, "DisplayCurrentWord", false); Pump(100);
+                                ClickInk(reading);
+                                Check(meaning.IsVisible && meaning.Text == "公司职员", "native kana click reveals Chinese");
+                            }
+                        }
+                Console.WriteLine("Native answer-click tests passed.");
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+            finally { main.Close(); SetCursorPos(cursor.X, cursor.Y); SetForegroundWindow(foreground); }
+        }
+
+        private static void ClickInk(FrameworkElement target)
+        {
+            int width = (int)Math.Ceiling(target.ActualWidth), height = (int)Math.Ceiling(target.ActualHeight);
+            RenderTargetBitmap image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            image.Render(target);
+            byte[] pixels = new byte[width * height * 4];
+            image.CopyPixels(pixels, width * 4, 0);
+            // Fully transparent window pixels click through, so click actual glyph ink, not its bounding box.
+            for (int y = 1; y < height - 1; y++)
+                for (int x = 1; x < width - 1; x++)
+                {
+                    int offset = (y * width + x) * 4;
+                    if (pixels[offset + 3] < 240 || pixels[offset] < 150) continue;
+                    Point screen = target.PointToScreen(new Point(x + 0.5, y + 0.5));
+                    if (!SetCursorPos((int)Math.Round(screen.X), (int)Math.Round(screen.Y)))
+                        throw new InvalidOperationException("Cannot position mouse for click test.");
+                    Pump(100);
+                    INPUT down = new INPUT { Type = 0, Data = new INPUTDATA { Mouse = new MOUSEINPUT { Flags = 2 } } };
+                    INPUT up = new INPUT { Type = 0, Data = new INPUTDATA { Mouse = new MOUSEINPUT { Flags = 4 } } };
+                    try
+                    {
+                        if (SendInput(1, new INPUT[] { down }, Marshal.SizeOf(typeof(INPUT))) != 1)
+                            throw new InvalidOperationException("Mouse down injection failed.");
+                        Pump(60);
+                    }
+                    finally { SendInput(1, new INPUT[] { up }, Marshal.SizeOf(typeof(INPUT))); }
+                    Pump(100);
+                    return;
+                }
+            throw new InvalidOperationException("No visible text pixels to click.");
+        }
+
+        private static object Call(MemoWindow window, string name, params object[] args)
+        { return typeof(MemoWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(window, args); }
 
         private static void TestApp()
         {
