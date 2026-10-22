@@ -80,6 +80,11 @@ namespace NihongoDeskMemoWpf
                 config.BackgroundTransparent = true;
                 Call(window, "ApplyAppearance");
                 Check(((SolidColorBrush)((Border)Field(window, "surface")).Background).Color.A == 0, "pure text mode stays transparent");
+                Call(window, "ChromeHideTimerTick", window, EventArgs.Empty);
+                Check(((FrameworkElement)Field(window, "headerPanel")).Opacity == 0 &&
+                    ((FrameworkElement)Field(window, "navigationPanel")).Opacity == 0, "transparent chrome hides together after leaving");
+                Call(window, "ShowChromeTemporarily");
+                Check(((FrameworkElement)Field(window, "navigationPanel")).IsHitTestVisible, "revealed navigation is clickable");
                 Layout(root, 300, 280);
                 Check(((FrameworkElement)Field(window, "answerPanel")).ActualHeight > 60, "minimum window keeps separate answer region");
                 Console.WriteLine("Desktop workflow and fixed-layout tests passed.");

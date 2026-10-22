@@ -448,7 +448,7 @@ namespace NihongoDeskMemoWpf
         private void ChromeHideTimerTick(object sender, EventArgs e)
         {
             chromeHideTimer.Stop();
-            if (config.BackgroundTransparent && !chromePinned && !headerPanel.IsMouseOver)
+            if (config.BackgroundTransparent && !chromePinned && !IsMouseOver && !menuOpen)
             {
                 SetChromeOpacity(0);
             }
