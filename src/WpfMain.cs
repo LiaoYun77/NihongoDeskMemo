@@ -712,6 +712,7 @@ namespace NihongoDeskMemoWpf
 
         private void SetStudyMode(int value)
         {
+            if (ActivateExistingDialog()) return;
             if (config.StudyMode == value) return;
             int old = config.StudyMode;
             config.StudyMode = value;
@@ -797,6 +798,8 @@ namespace NihongoDeskMemoWpf
 
         private void BackupWords()
         {
+            ShowMainWindow();
+            if (ActivateExistingDialog()) return;
             WithDialog(delegate
             {
                 try { NihongoDeskMemo.Storage.SaveDatabase(database); MessageBox.Show(this, NihongoDeskMemo.Storage.BackupDatabase(), "词库备份已创建"); }
@@ -807,6 +810,7 @@ namespace NihongoDeskMemoWpf
         private void RestoreWords()
         {
             ShowMainWindow();
+            if (ActivateExistingDialog()) return;
             WithDialog(delegate
             {
                 Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog { Title = "恢复词库备份", Filter = "词库备份|*.xml;*.bak" };
@@ -902,6 +906,7 @@ namespace NihongoDeskMemoWpf
 
         private void LibraryClick(object sender, RoutedEventArgs e)
         {
+            if (ActivateExistingDialog()) return;
             WithDialog(delegate
             {
                 try
@@ -918,6 +923,7 @@ namespace NihongoDeskMemoWpf
 
         private void SettingsClick(object sender, RoutedEventArgs e)
         {
+            if (ActivateExistingDialog()) return;
             WithDialog(delegate
             {
                 try
@@ -974,6 +980,13 @@ namespace NihongoDeskMemoWpf
                 Exception reason = ex.InnerException ?? ex;
                 System.Windows.MessageBox.Show("导入未完成：" + reason.Message, "导入失败");
             }
+        }
+
+        private bool ActivateExistingDialog()
+        {
+            if (modalDepth == 0) return false;
+            foreach (Window owned in OwnedWindows) if (owned.IsVisible) { owned.Activate(); break; }
+            return true;
         }
 
         private void OpenLibraryFromSettings()

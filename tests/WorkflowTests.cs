@@ -71,6 +71,11 @@ namespace NihongoDeskMemoWpf
                 Check(!timer.IsEnabled, "restoring window preserves manual pause");
                 Call(window, "TogglePause");
                 Check(timer.IsEnabled, "resume restarts refresh");
+                typeof(MemoWindow).GetField("modalDepth", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, 1);
+                Call(window, "SetStudyMode", 0);
+                Check(config.StudyMode == 1, "tray commands do not change scope behind an open dialog");
+                Call(window, "SettingsClick", window, new RoutedEventArgs());
+                typeof(MemoWindow).GetField("modalDepth", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, 0);
                 Check(window.ContextMenu.Items.Count >= 12, "settings and recovery accessible from context menu");
                 config.BackgroundTransparent = true;
                 Call(window, "ApplyAppearance");
