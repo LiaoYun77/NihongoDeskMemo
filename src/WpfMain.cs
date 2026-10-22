@@ -142,7 +142,7 @@ namespace NihongoDeskMemoWpf
             questionPanel.CornerRadius = new CornerRadius(6);
             questionPanel.Padding = new Thickness(12, 8, 12, 8);
             questionPanel.Margin = new Thickness(0, 7, 0, 5);
-            questionPanel.MouseLeftButtonDown += RevealMouseDown;
+            questionPanel.AddHandler(MouseLeftButtonDownEvent, new MouseButtonEventHandler(RevealMouseDown), true);
             questionPanel.MouseRightButtonDown += ContentRightButtonDown;
             Grid.SetRow(questionPanel, 1);
             normalContent.Children.Add(questionPanel);
@@ -164,7 +164,7 @@ namespace NihongoDeskMemoWpf
             answerPanel.CornerRadius = new CornerRadius(6);
             answerPanel.Padding = new Thickness(10, 6, 10, 7);
             answerPanel.Margin = new Thickness(0, 0, 0, 7);
-            answerPanel.MouseLeftButtonDown += RevealMouseDown;
+            answerPanel.AddHandler(MouseLeftButtonDownEvent, new MouseButtonEventHandler(RevealMouseDown), true);
             answerPanel.MouseRightButtonDown += ContentRightButtonDown;
             Grid.SetRow(answerPanel, 2);
             normalContent.Children.Add(answerPanel);
@@ -879,6 +879,13 @@ namespace NihongoDeskMemoWpf
 
         private void RevealMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // ScrollViewer handles text clicks for focus; scrollbar controls must keep their own input.
+            DependencyObject source = e.OriginalSource as DependencyObject;
+            while (source != null && source != sender)
+            {
+                if (source is ScrollBar || source is Thumb || source is ButtonBase) return;
+                source = ParentOf(source);
+            }
             if (!pseudoHidden)
             {
                 ShowChromeTemporarily();

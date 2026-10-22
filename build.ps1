@@ -63,6 +63,8 @@ if ($RunTests -or $IncludeDesktopTests) {
         Write-Host 'Desktop tests temporarily register/send F10-F12 and Ctrl+Shift+Q. Close running copies first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'
         Compile 'exe' 'NihongoDeskMemoWpf.GlobalHideTests' $desktopTest ($sources + (Join-Path $root 'tests\GlobalHideTests.cs'))
+        & $desktopTest --click
+        if ($LASTEXITCODE -ne 0) { throw 'Native answer-click tests failed.' }
         & $desktopTest --registration
         if ($LASTEXITCODE -ne 0) { throw 'Hotkey registration tests failed.' }
         & $desktopTest
