@@ -45,6 +45,36 @@ namespace NihongoDeskMemoWpf
                 Render(history, 720, 440, args, "review-history-compact.png"); history.Close();
                 WpfLibraryWindow library = new WpfLibraryWindow(data);
                 Render(library, 760, 440, args, "library-compact.png"); library.Close();
+                word.ExampleJapanese = "私は会社員です。\n日本語を勉強しています。";
+                word.ExampleChinese = "我是公司职员。\n我正在学习日语。";
+                word.SourceLabel = "自编例句";
+                word.SourceText = new string('原', 600);
+                WordDetailsWindow details = new WordDetailsWindow(word);
+                Render(details, 660, 520, args, "word-details.png");
+                Render(details, 420, 330, args, "word-details-compact.png"); details.Close();
+                LearningStatisticsWindow stats = new LearningStatisticsWindow(data, new AppConfig());
+                Check(((DataGrid)Field(stats, "weakWords")).Items.Count == 0, "undone error does not create a weak word");
+                stats.Close(); word.Marked = true;
+                stats = new LearningStatisticsWindow(data, new AppConfig());
+                Check(((DataGrid)Field(stats, "weakWords")).Items.Count > 0, "weak list contains marked word");
+                ((ComboBox)Field(stats, "direction")).SelectedIndex = 3;
+                Render(stats, 900, 560, args, "statistics.png");
+                Render(stats, 620, 380, args, "statistics-compact.png"); stats.Close();
+                AppConfig config = new AppConfig { SpeechRate = 2 };
+                WpfSettingsWindow settings = new WpfSettingsWindow(config, data, null, null, null);
+                ((Slider)Field(settings, "speechRateSlider")).Value = -3;
+                Render(settings, 560, 660, args, "settings-speech.png");
+                ScrollViewer scroll = FindScroll((DependencyObject)settings.Content);
+                scroll.ScrollToEnd();
+                Render(settings, 560, 500, args, "settings-speech-compact.png");
+                settings.Close();
+                Check(config.SpeechRate == 2, "closing speech settings discards draft");
+                settings = new WpfSettingsWindow(config, data, null, null, null);
+                ((Slider)Field(settings, "speechRateSlider")).Value = -3;
+                string error = null;
+                object[] saveArgs = { error };
+                bool saved = (bool)typeof(WpfSettingsWindow).GetMethod("TrySaveSettings", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(settings, saveArgs);
+                Check(saved && config.SpeechRate == -3, "saving commits speech rate"); settings.Close();
                 Console.WriteLine("Import preview and review history UI tests passed.");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
@@ -65,6 +95,14 @@ namespace NihongoDeskMemoWpf
 
         private static object Field(object value, string name)
         { return value.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(value); }
+        private static ScrollViewer FindScroll(DependencyObject parent)
+        {
+            ScrollViewer found = parent as ScrollViewer;
+            if (found != null) return found;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            { found = FindScroll(VisualTreeHelper.GetChild(parent, i)); if (found != null) return found; }
+            return null;
+        }
         private static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     }
 }

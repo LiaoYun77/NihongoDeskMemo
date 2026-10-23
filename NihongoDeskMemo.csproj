@@ -53,6 +53,8 @@
     <Compile Include="src\ReviewData.cs" />
     <Compile Include="src\JapaneseSpeech.cs" />
     <Compile Include="src\WordDetailsWindow.cs" />
+    <Compile Include="src\LearningStatistics.cs" />
+    <Compile Include="src\LearningStatisticsWindow.cs" />
     <Compile Include="src\ReviewHistoryWindow.cs" />
     <Compile Include="src\UnitSelectionControl.cs" />
     <Compile Include="src\VersionInfo.cs" />

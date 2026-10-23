@@ -760,6 +760,7 @@ namespace NihongoDeskMemoWpf
             undoMenu = AddMenu(menu, "撤销上次评级", delegate { UndoClick(this, new RoutedEventArgs()); });
             menu.Items.Add(new Separator());
             AddMenu(menu, "词库管理", delegate { LibraryClick(this, new RoutedEventArgs()); });
+            AddMenu(menu, "学习统计", ShowStatistics);
             AddMenu(menu, "设置", delegate { SettingsClick(this, new RoutedEventArgs()); });
             AddMenu(menu, "备份词库", BackupWords);
             AddMenu(menu, "从备份恢复", RestoreWords);
@@ -801,6 +802,7 @@ namespace NihongoDeskMemoWpf
             AddTrayMenu(menu, "到期复习", delegate { SetStudyMode(0); });
             AddTrayMenu(menu, "设置", delegate { ShowMainWindow(); SettingsClick(this, new RoutedEventArgs()); });
             AddTrayMenu(menu, "词库管理", delegate { ShowMainWindow(); LibraryClick(this, new RoutedEventArgs()); });
+            AddTrayMenu(menu, "学习统计", delegate { ShowMainWindow(); ShowStatistics(); });
             AddTrayMenu(menu, "备份词库", BackupWords);
             AddTrayMenu(menu, "从备份恢复", RestoreWords);
             AddTrayMenu(menu, "退出", Close);
@@ -811,6 +813,12 @@ namespace NihongoDeskMemoWpf
         private void AddTrayMenu(System.Windows.Forms.ContextMenuStrip menu, string text, Action action)
         {
             menu.Items.Add(text, null, delegate { Dispatcher.BeginInvoke(new Action(action)); });
+        }
+
+        private void ShowStatistics()
+        {
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate { new LearningStatisticsWindow(database, config) { Owner = this }.ShowDialog(); });
         }
 
         private void BackupWords()

@@ -27,11 +27,12 @@ Release publication is confirmed only after the GitHub release and assets exist.
 All feature modules are implemented; full-version verification and publication
 remain distinct steps. See V0.5-SPEC.md.
 
-## v0.6.0 - Japanese Learning Content (Planned)
+## v0.6.0 - Japanese Learning Content (In Development)
 
-- Japanese pronunciation with manual playback by default and speech rate control.
-- Editable/importable examples and source information.
-- Daily rated-card counts, due counts and weak-word views.
+- [x] Japanese pronunciation with manual playback by default and speech rate control.
+- [x] Editable/importable examples and source information; schema 2 backups.
+- [x] Daily rated-card counts, due counts and weak-word views.
+- [ ] Full desktop verification, PR CI and authorized release publication.
 - Evaluate an established FSRS implementation after review history is available;
   keep the current scheduler if compatibility or evidence is insufficient.
 
