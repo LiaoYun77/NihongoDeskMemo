@@ -10,6 +10,11 @@ namespace NihongoDeskMemo
     {
         public static ImportResult ImportFile(string path, WordDatabase database)
         {
+            return Import(ReadFile(path), database);
+        }
+
+        internal static WordDatabase ReadFile(string path)
+        {
             XmlReaderSettings settings = new XmlReaderSettings();
             settings.DtdProcessing = DtdProcessing.Prohibit;
             settings.XmlResolver = null;
@@ -24,6 +29,7 @@ namespace NihongoDeskMemo
                 incoming = (WordDatabase)serializer.Deserialize(reader);
             if (incoming == null || incoming.Words == null || incoming.Words.Count == 0)
                 throw new InvalidDataException("XML 词库为空或格式不正确。");
+            if (incoming.SchemaVersion > ReviewData.CurrentSchemaVersion) throw new InvalidDataException("不支持该词库版本，请使用新版软件。");
 
             // Validate every row before touching the current database.
             HashSet<string> incomingIds = new HashSet<string>(StringComparer.Ordinal);
@@ -35,28 +41,65 @@ namespace NihongoDeskMemo
                 if (!incomingIds.Add(item.SourceId))
                     throw new InvalidDataException("XML 词库包含重复来源编号：" + item.SourceId);
             }
+            return incoming;
+        }
 
-            HashSet<string> existingIds = new HashSet<string>(StringComparer.Ordinal);
+        internal static ImportResult Import(WordDatabase incoming, WordDatabase database)
+        { return Import(incoming, database, false); }
+
+        internal static ImportResult Import(WordDatabase incoming, WordDatabase database, bool updateExisting)
+        {
+            Dictionary<string, WordItem> existingIds = new Dictionary<string, WordItem>(StringComparer.Ordinal);
             foreach (WordItem item in database.Words)
-                if (!string.IsNullOrEmpty(item.SourceId)) existingIds.Add(item.SourceId);
+                {
+                    string key = SourceKey(item);
+                    if (updateExisting && existingIds.ContainsKey(key))
+                        throw new InvalidDataException("本地词库来源编号重复，无法确定更新对象：" + key);
+                    existingIds[key] = item;
+                }
             ImportResult result = new ImportResult();
             foreach (WordItem item in incoming.Words)
             {
-                if (existingIds.Contains(item.SourceId))
+                if (existingIds.ContainsKey(item.SourceId))
                 {
+                    if (updateExisting)
+                    {
+                        CopyContent(item, existingIds[item.SourceId]);
+                        result.Updated++; continue;
+                    }
                     result.Unchanged++;
                     continue;
                 }
-                // Import vocabulary only. Existing progress and edits are never overwritten.
-                database.Words.Add(new WordItem
-                {
-                    Japanese = item.Japanese, Pinyin = item.Pinyin, Chinese = item.Chinese,
-                    Unit = item.Unit, SourceId = item.SourceId, SourceText = item.SourceText
-                });
-                existingIds.Add(item.SourceId);
+                WordItem added = new WordItem();
+                CopyContent(item, added); database.Words.Add(added);
+                existingIds.Add(item.SourceId, added);
                 result.Added++;
             }
             return result;
+        }
+
+        private static void CopyContent(WordItem from, WordItem to)
+        {
+            to.Japanese = from.Japanese; to.Pinyin = from.Pinyin; to.Chinese = from.Chinese;
+            to.Unit = from.Unit; to.SourceId = from.SourceId; to.SourceText = from.SourceText;
+            to.ExampleJapanese = from.ExampleJapanese; to.ExampleChinese = from.ExampleChinese; to.SourceLabel = from.SourceLabel;
+        }
+
+        internal static string SourceKey(WordItem word)
+        { return string.IsNullOrWhiteSpace(word.SourceId) ? "local:" + word.WordId : word.SourceId; }
+
+        public static void ExportFile(string path, WordDatabase database)
+        {
+            WordDatabase exported = new WordDatabase { SchemaVersion = ReviewData.CurrentSchemaVersion };
+            HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (WordItem word in database.Words)
+            {
+                WordItem copy = new WordItem(); CopyContent(word, copy);
+                copy.SourceId = SourceKey(word);
+                if (!ids.Add(copy.SourceId)) throw new InvalidDataException("来源编号重复，无法无歧义导出：" + copy.SourceId);
+                exported.Words.Add(copy);
+            }
+            XmlFileStore.Save(path, exported);
         }
     }
 }

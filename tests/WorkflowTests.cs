@@ -27,6 +27,7 @@ namespace NihongoDeskMemoWpf
                 PracticeScope.SetUnits(config, new string[0]);
                 WordDatabase data = (WordDatabase)Field(window, "database");
                 data.Words.Clear();
+                data.ReviewEvents.Clear();
                 data.Words.Add(new WordItem { Japanese = "会社員", Pinyin = "かいしゃいん", Chinese = "公司职员", Unit = "第01课" });
                 data.Words.Add(new WordItem { Japanese = "会議", Pinyin = "かいぎ", Chinese = "会议", Unit = "第02课" });
                 Call(window, "ApplyConfig"); Call(window, "ShowNextWord");
@@ -50,9 +51,12 @@ namespace NihongoDeskMemoWpf
                 int previousCount = first.ReviewCount;
                 Call(window, "Rate", 1);
                 Check(first.ReviewCount == previousCount + 1 && first.WrongCount == 1, "rating updates current word");
+                Check(data.ReviewEvents.Count == 1 && data.ReviewEvents[0].WordId == first.WordId && data.ReviewEvents[0].Direction == 0,
+                    "rating persists a direction-specific event");
                 Call(window, "UndoClick", window, new RoutedEventArgs());
                 Check(first.ReviewCount == previousCount && first.WrongCount == 0 && first.NextReviewTime.Length == 0,
                     "undo restores persisted scheduling state");
+                Check(data.ReviewEvents.Count == 1 && data.ReviewEvents[0].Undone, "undo retains an auditable undone event");
                 Check(Storage.LoadDatabase().Words.Find(w => w.Japanese == first.Japanese).ReviewCount == previousCount,
                     "undo survives reload");
                 Check(object.ReferenceEquals(first, Field(window, "currentWord")), "undo returns to rated word");
@@ -62,7 +66,7 @@ namespace NihongoDeskMemoWpf
                 Call(window, "Rate", 4);
                 Check(first.ReviewCount == previousCount, "history navigation cannot double grade");
                 config.StudyMode = 1;
-                foreach (WordItem word in data.Words) word.NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
+                foreach (WordItem word in data.Words) ReviewData.For(word, 0).NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
                 Call(window, "ResetSession"); Call(window, "ShowNextWord"); Call(window, "RevealAnswer");
                 Check(Field(window, "currentWord") != null && timer.IsEnabled, "browse uses future cards and keeps automatic refresh");
                 Call(window, "Rate", 1);

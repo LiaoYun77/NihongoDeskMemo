@@ -20,34 +20,37 @@ namespace NihongoDeskMemo
         }
     }
 
-    public class WordItem
+    public class WordItem : ReviewState
     {
+        public string WordId { get; set; }
+        public List<DirectionProgress> DirectionStates { get; set; }
         public string Japanese { get; set; }
         public string Pinyin { get; set; }
         public string Chinese { get; set; }
         public string Unit { get; set; }
         public string SourceId { get; set; }
         public string SourceText { get; set; }
+        public string ExampleJapanese { get; set; }
+        public string ExampleChinese { get; set; }
+        public string SourceLabel { get; set; }
         public int Weight { get; set; }
         public bool Marked { get; set; }
         public int SeenCount { get; set; }
         public string LastSeenUtc { get; set; }
-        public string LastReviewTime { get; set; }
-        public string NextReviewTime { get; set; }
-        public int ReviewCount { get; set; }
-        public int WrongCount { get; set; }
-        public int CorrectStreak { get; set; }
-        public double Difficulty { get; set; }
-        public int IntervalDays { get; set; }
 
         public WordItem()
         {
+            WordId = Guid.NewGuid().ToString("N");
+            DirectionStates = new List<DirectionProgress>();
             Japanese = string.Empty;
             Pinyin = string.Empty;
             Chinese = string.Empty;
             Unit = string.Empty;
             SourceId = string.Empty;
             SourceText = string.Empty;
+            ExampleJapanese = string.Empty;
+            ExampleChinese = string.Empty;
+            SourceLabel = string.Empty;
             Weight = 1;
             LastSeenUtc = string.Empty;
             LastReviewTime = string.Empty;
@@ -58,11 +61,14 @@ namespace NihongoDeskMemo
 
     public class WordDatabase
     {
+        public int SchemaVersion { get; set; }
         public List<WordItem> Words { get; set; }
+        public List<ReviewEvent> ReviewEvents { get; set; }
 
         public WordDatabase()
         {
             Words = new List<WordItem>();
+            ReviewEvents = new List<ReviewEvent>();
         }
     }
 
@@ -80,8 +86,11 @@ namespace NihongoDeskMemo
         public bool ShowRatingButtons { get; set; }
         public string PracticeUnit { get; set; }
         public string[] PracticeUnits { get; set; }
+        public List<PracticePreset> PracticePresets { get; set; }
         public int ReviewMode { get; set; }
         public int StudyMode { get; set; }
+        public string SpeechVoice { get; set; }
+        public int SpeechRate { get; set; }
         public int WindowX { get; set; }
         public int WindowY { get; set; }
         public int WindowWidth { get; set; }
@@ -98,7 +107,9 @@ namespace NihongoDeskMemo
             HideMeaningUntilClick = true;
             ShowRatingButtons = true;
             PracticeUnit = string.Empty;
+            PracticePresets = new List<PracticePreset>();
             ReviewMode = 0;
+            SpeechVoice = string.Empty;
             WindowX = -1;
             WindowY = -1;
             WindowWidth = 300;
@@ -122,8 +133,10 @@ namespace NihongoDeskMemo
         public static WordDatabase LoadDatabase()
         {
             EnsureDirectory();
-            string path = File.Exists(DatabasePath) ? DatabasePath : LegacyDatabasePath;
-            WordDatabase database = LoadXml<WordDatabase>(path, new WordDatabase());
+            string path = LoadPath(DatabasePath, LegacyDatabasePath);
+            string source;
+            WordDatabase database = XmlFileStore.Load<WordDatabase>(path, new WordDatabase(), out source);
+            if (database.SchemaVersion < ReviewData.CurrentSchemaVersion && source != null) ReviewData.BackupLegacy(source, AppDirectory, "v0.6");
             NormalizeDatabase(database);
             return database;
         }
@@ -131,7 +144,7 @@ namespace NihongoDeskMemo
         public static AppConfig LoadConfig()
         {
             EnsureDirectory();
-            string path = File.Exists(ConfigPath) ? ConfigPath : LegacyConfigPath;
+            string path = LoadPath(ConfigPath, LegacyConfigPath);
             AppConfig config = LoadXml<AppConfig>(path, new AppConfig());
             config.PracticeUnit = SafeTrim(config.PracticeUnit);
             if (config.ReviewMode < 0 || config.ReviewMode > 3)
@@ -166,6 +179,11 @@ namespace NihongoDeskMemo
             EnsureDirectory();
             NormalizeDatabase(database);
             SaveXml(DatabasePath, database);
+        }
+
+        internal static string LoadPath(string local, string legacy)
+        {
+            return File.Exists(local) || File.Exists(local + ".bak") ? local : legacy;
         }
 
         public static string BackupDatabase()
@@ -232,6 +250,7 @@ namespace NihongoDeskMemo
                     item.Weight = 80;
                 }
             }
+            ReviewData.Normalize(database);
         }
 
         public static string SafeTrim(string value)
@@ -2242,6 +2261,10 @@ namespace NihongoDeskMemo
 
     internal static class WordImporter
     {
+        public static ImportPreview PreviewFile(string path, WordDatabase database, bool updateExisting)
+        {
+            return ImportPreview.Prepare(path, database, updateExisting);
+        }
         private static readonly char[] SimpleSeparators = new char[] { '\t', ',', '，', '=', '：', ':' };
         private static readonly string[] WideSeparators = new string[] { " - ", " -- ", " —— ", " — " };
 
@@ -2343,7 +2366,7 @@ namespace NihongoDeskMemo
         //    return item;
         //}
 
-        private static WordItem ParseLine(string rawLine)
+        internal static WordItem ParseLine(string rawLine)
         {
             if (rawLine == null)
             {
@@ -2490,10 +2513,7 @@ namespace NihongoDeskMemo
             for (i = 0; i < rawParts.Length; i++)
             {
                 string value = Storage.SafeTrim(rawParts[i]);
-                if (value.Length > 0)
-                {
-                    parts.Add(value);
-                }
+                parts.Add(value);
             }
             return parts;
         }
@@ -2518,7 +2538,7 @@ namespace NihongoDeskMemo
             return Storage.SafeTrim(value).ToLowerInvariant();
         }
 
-        private static Encoding DetectEncoding(string path)
+        internal static Encoding DetectEncoding(string path)
         {
             byte[] bom = new byte[4];
             using (FileStream stream = File.OpenRead(path))

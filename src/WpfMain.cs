@@ -61,6 +61,7 @@ namespace NihongoDeskMemoWpf
         private bool menuOpen;
         private bool closing;
         private readonly StudySession study;
+        private readonly JapaneseSpeech speech = new JapaneseSpeech();
         private readonly Stack<NihongoDeskMemo.WordItem> previousWords = new Stack<NihongoDeskMemo.WordItem>();
         private ReviewSnapshot lastReview;
         private System.Windows.Forms.NotifyIcon trayIcon;
@@ -257,6 +258,11 @@ namespace NihongoDeskMemoWpf
             Grid.SetColumn(tools, 1);
             header.Children.Add(tools);
 
+            Button speak = ToolButton("▶");
+            speak.ToolTip = "朗读日语（F7）";
+            speak.Click += delegate { SpeakCurrentWord(); };
+            tools.Children.Add(speak);
+
             Button library = ToolButton("词库");
             library.Click += LibraryClick;
             tools.Children.Add(library);
@@ -376,6 +382,7 @@ namespace NihongoDeskMemoWpf
 
         private void GlobalVisibilityChanged(object sender, EventArgs e)
         {
+            if (globalHideHotkey.IsHidden) speech.Stop();
             if (globalHideHotkey.IsHidden) chromeHideTimer.Stop();
             else if (config.BackgroundTransparent && !pseudoHidden) ShowChromeTemporarily();
             UpdateRefreshState();
@@ -467,6 +474,7 @@ namespace NihongoDeskMemoWpf
 
         private void ShowNextWord()
         {
+            speech.Stop();
             if (currentWord != null)
             {
                 if (previousWords.Count >= 100)
@@ -504,7 +512,7 @@ namespace NihongoDeskMemoWpf
             ApplyReviewDisplay();
             statusText.Text = (config.StudyMode == 1 ? "浏览" : "复习") + " · " + ModeName() + "  ·  " +
                 PracticeScope.Summary(config) +
-                "  ·  复习 " + currentWord.ReviewCount.ToString();
+                "  ·  复习 " + NihongoDeskMemo.ReviewData.For(currentWord, config.ReviewMode).ReviewCount.ToString();
             UpdateAnswerState();
             timer.Stop();
             UpdateRefreshState();
@@ -612,7 +620,7 @@ namespace NihongoDeskMemoWpf
                 NihongoDeskMemo.WordItem item = database.Words[i];
                 if (!InPracticeUnit(item) || !EligibleForMode(item)) continue;
                 DateTime next;
-                if (TryParseUtc(item.NextReviewTime, out next) && next < nextDue)
+                if (TryParseUtc(NihongoDeskMemo.ReviewData.For(item, config.ReviewMode).NextReviewTime, out next) && next < nextDue)
                 {
                     nextDue = next;
                     found = true;
@@ -639,8 +647,8 @@ namespace NihongoDeskMemoWpf
         private void Rate(int rating)
         {
             if (currentWord == null || viewingHistory || !ReviewPresentation.CanRateWithKeyboard(config, answerVisible)) return;
-            ReviewSnapshot before = new ReviewSnapshot(currentWord);
-            ReviewActions.Rate(currentWord, rating, DateTime.UtcNow);
+            ReviewSnapshot before = new ReviewSnapshot(database, currentWord);
+            ReviewActions.Rate(database, currentWord, config.ReviewMode, rating, DateTime.UtcNow);
             try { NihongoDeskMemo.Storage.SaveDatabase(database); }
             catch (Exception ex) { before.Restore(); MessageBox.Show(this, "评级未保存：" + ex.Message, "保存失败"); return; }
             lastReview = before;
@@ -649,6 +657,7 @@ namespace NihongoDeskMemoWpf
 
         private void PreviousClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             while (previousWords.Count > 0)
             {
                 NihongoDeskMemo.WordItem previous = previousWords.Pop();
@@ -663,9 +672,10 @@ namespace NihongoDeskMemoWpf
 
         private void UndoClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             if (lastReview == null || !database.Words.Contains(lastReview.Word)) return;
-            ReviewSnapshot after = new ReviewSnapshot(lastReview.Word);
-            lastReview.Restore();
+            ReviewSnapshot after = new ReviewSnapshot(database, lastReview.Word);
+            lastReview.Undo();
             try { NihongoDeskMemo.Storage.SaveDatabase(database); }
             catch (Exception ex) { after.Restore(); MessageBox.Show(this, "撤销未保存：" + ex.Message, "保存失败"); return; }
             currentWord = lastReview.Word;
@@ -704,6 +714,7 @@ namespace NihongoDeskMemoWpf
 
         private void WithDialog(Action action)
         {
+            speech.Stop();
             modalDepth++;
             UpdateRefreshState();
             try { action(); }
@@ -740,9 +751,16 @@ namespace NihongoDeskMemoWpf
             reviewMenu = AddMenu(menu, "到期复习", delegate { SetStudyMode(0); });
             AddMenu(menu, "上一词", delegate { PreviousClick(this, new RoutedEventArgs()); });
             AddMenu(menu, "下一词", ShowNextWord);
+            AddMenu(menu, "朗读日语（F7）", SpeakCurrentWord);
+            AddMenu(menu, "例句与来源", delegate
+            {
+                if (currentWord == null || ActivateExistingDialog()) return;
+                WithDialog(delegate { new WordDetailsWindow(currentWord) { Owner = this }.ShowDialog(); });
+            });
             undoMenu = AddMenu(menu, "撤销上次评级", delegate { UndoClick(this, new RoutedEventArgs()); });
             menu.Items.Add(new Separator());
             AddMenu(menu, "词库管理", delegate { LibraryClick(this, new RoutedEventArgs()); });
+            AddMenu(menu, "学习统计", ShowStatistics);
             AddMenu(menu, "设置", delegate { SettingsClick(this, new RoutedEventArgs()); });
             AddMenu(menu, "备份词库", BackupWords);
             AddMenu(menu, "从备份恢复", RestoreWords);
@@ -784,6 +802,7 @@ namespace NihongoDeskMemoWpf
             AddTrayMenu(menu, "到期复习", delegate { SetStudyMode(0); });
             AddTrayMenu(menu, "设置", delegate { ShowMainWindow(); SettingsClick(this, new RoutedEventArgs()); });
             AddTrayMenu(menu, "词库管理", delegate { ShowMainWindow(); LibraryClick(this, new RoutedEventArgs()); });
+            AddTrayMenu(menu, "学习统计", delegate { ShowMainWindow(); ShowStatistics(); });
             AddTrayMenu(menu, "备份词库", BackupWords);
             AddTrayMenu(menu, "从备份恢复", RestoreWords);
             AddTrayMenu(menu, "退出", Close);
@@ -794,6 +813,12 @@ namespace NihongoDeskMemoWpf
         private void AddTrayMenu(System.Windows.Forms.ContextMenuStrip menu, string text, Action action)
         {
             menu.Items.Add(text, null, delegate { Dispatcher.BeginInvoke(new Action(action)); });
+        }
+
+        private void ShowStatistics()
+        {
+            if (ActivateExistingDialog()) return;
+            WithDialog(delegate { new LearningStatisticsWindow(database, config) { Owner = this }.ShowDialog(); });
         }
 
         private void BackupWords()
@@ -819,12 +844,17 @@ namespace NihongoDeskMemoWpf
                 {
                     NihongoDeskMemo.WordDatabase restored = NihongoDeskMemo.XmlFileStore.Load<NihongoDeskMemo.WordDatabase>(dialog.FileName, null);
                     if (restored == null || restored.Words == null) throw new InvalidOperationException("不是有效的词库备份。");
+                    NihongoDeskMemo.ReviewData.Normalize(restored);
                     if (MessageBox.Show(this, "恢复 " + restored.Words.Count + " 条词条及其复习进度？当前词库会先备份。", "确认恢复", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
                     NihongoDeskMemo.Storage.BackupDatabase();
                     List<NihongoDeskMemo.WordItem> original = database.Words;
+                    List<NihongoDeskMemo.ReviewEvent> originalEvents = database.ReviewEvents;
+                    int originalSchema = database.SchemaVersion;
                     database.Words = restored.Words;
+                    database.ReviewEvents = restored.ReviewEvents;
+                    database.SchemaVersion = restored.SchemaVersion;
                     try { NihongoDeskMemo.Storage.SaveDatabase(database); }
-                    catch { database.Words = original; throw; }
+                    catch { database.Words = original; database.ReviewEvents = originalEvents; database.SchemaVersion = originalSchema; throw; }
                     ResetSession(); ShowNextWord();
                 }
                 catch (Exception ex) { MessageBox.Show(this, ex.Message, "恢复未完成"); }
@@ -833,6 +863,10 @@ namespace NihongoDeskMemoWpf
 
         private void WindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
+            if (e.Key == Key.F7 && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                SpeakCurrentWord(); e.Handled = true; return;
+            }
             if (e.Key == Key.F9)
             {
                 chromePinned = !chromePinned;
@@ -869,6 +903,14 @@ namespace NihongoDeskMemoWpf
                 Rate(rating);
                 e.Handled = true;
             }
+        }
+
+        private void SpeakCurrentWord()
+        {
+            if (pseudoHidden || modalDepth > 0 || (globalHideHotkey != null && globalHideHotkey.IsHidden)) return;
+            string error;
+            if (!speech.TrySpeak(currentWord, config, out error))
+                WithDialog(delegate { MessageBox.Show(this, error, "日语朗读"); });
         }
 
         private void RatingClick(object sender, RoutedEventArgs e)
@@ -973,9 +1015,12 @@ namespace NihongoDeskMemoWpf
             if (dialog.ShowDialog() != true) return;
             try
             {
-                string backup = NihongoDeskMemo.Storage.BackupDatabase();
-                NihongoDeskMemo.ImportResult result = NihongoDeskMemo.WordImporter.ImportFile(dialog.FileName, database);
-                NihongoDeskMemo.Storage.SaveDatabase(database);
+                ImportPreviewWindow preview = new ImportPreviewWindow(dialog.FileName, database) { Owner = this };
+                if (preview.ShowDialog() != true || preview.Plan == null) return;
+                string backup = string.Empty;
+                preview.Plan.Apply(database, delegate(NihongoDeskMemo.WordDatabase value)
+                { backup = NihongoDeskMemo.Storage.BackupDatabase(); NihongoDeskMemo.Storage.SaveDatabase(value); });
+                NihongoDeskMemo.ImportResult result = preview.Plan.Result;
                 ResetSession(); ShowNextWord();
                 System.Windows.MessageBox.Show(
                     "新增 " + result.Added + " 条，更新 " + result.Updated + " 条，已存在 " + result.Unchanged +
@@ -1020,6 +1065,7 @@ namespace NihongoDeskMemoWpf
                 item.CorrectStreak = 0;
                 item.Difficulty = 5.0;
                 item.IntervalDays = 0;
+                item.DirectionStates.Clear();
             }
             NihongoDeskMemo.Storage.SaveDatabase(database);
             ResetSession(); ShowNextWord();
@@ -1062,6 +1108,7 @@ namespace NihongoDeskMemoWpf
 
         private void HideClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             if (pseudoHidden) return;
             normalBounds = new Rect(Left, Top, Width, Height);
             pseudoHidden = true;
@@ -1095,6 +1142,7 @@ namespace NihongoDeskMemoWpf
 
         private void WindowClosed(object sender, EventArgs e)
         {
+            speech.Dispose();
             closing = true;
             if (globalHideHotkey != null) globalHideHotkey.Dispose();
             if (trayIcon != null)

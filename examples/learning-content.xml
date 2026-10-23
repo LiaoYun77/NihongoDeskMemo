@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WordDatabase>
+  <SchemaVersion>2</SchemaVersion>
+  <Words>
+    <WordItem>
+      <Japanese>会社員</Japanese>
+      <Pinyin>かいしゃいん</Pinyin>
+      <Chinese>公司职员</Chinese>
+      <Unit>示例单元</Unit>
+      <SourceId>demo-kaishain</SourceId>
+      <SourceLabel>自编示例</SourceLabel>
+      <SourceText>会社員 / かいしゃいん / 公司职员</SourceText>
+      <ExampleJapanese>私は会社員です。</ExampleJapanese>
+      <ExampleChinese>我是公司职员。</ExampleChinese>
+    </WordItem>
+  </Words>
+</WordDatabase>

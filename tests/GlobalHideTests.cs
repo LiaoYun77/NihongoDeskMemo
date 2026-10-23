@@ -284,8 +284,22 @@ namespace NihongoDeskMemoWpf
                 Check(word != null, "integration test has a real study word");
                 Check(Field(main, "trayIcon") != null, "tray entry created for the real app");
                 Check(timer.IsEnabled, "app refresh initially running");
+                JapaneseSpeech speech = (JapaneseSpeech)Field(main, "speech");
+                System.Speech.Synthesis.SpeechSynthesizer engine = null;
+                if (JapaneseSpeech.VoiceNames().Count > 0)
+                {
+                    engine = (System.Speech.Synthesis.SpeechSynthesizer)typeof(JapaneseSpeech).GetField("engine", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(speech);
+                    engine.SetOutputToNull(); engine.Pause();
+                    string speechError;
+                    Check(speech.TrySpeak((NihongoDeskMemo.WordItem)word, config, out speechError), "manual Japanese speech queued silently");
+                }
                 Press(hotkey.Shortcut);
                 Check(hotkey.IsHidden && !IsWindowVisible(handle), "real app hidden");
+                if (engine != null)
+                {
+                    engine.Resume(); Pump();
+                    Check(engine.State == System.Speech.Synthesis.SynthesizerState.Ready, "global hide cancels queued speech");
+                }
                 Check(!timer.IsEnabled, "refresh paused while hidden");
                 Press(hotkey.Shortcut);
                 Check(timer.IsEnabled && IsWindowVisible(handle), "app restored and refresh resumed");

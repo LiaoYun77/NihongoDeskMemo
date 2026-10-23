@@ -13,6 +13,7 @@ namespace NihongoDeskMemoWpf
         private readonly UniformGrid choices;
         private readonly TextBlock countText;
         private readonly List<CheckBox> boxes = new List<CheckBox>();
+        public event EventHandler SelectionUpdated;
 
         public UnitSelectionControl(NihongoDeskMemo.AppConfig config, NihongoDeskMemo.WordDatabase database)
         {
@@ -45,6 +46,13 @@ namespace NihongoDeskMemoWpf
             Populate(database, SelectedUnits());
         }
 
+        public void SelectUnits(NihongoDeskMemo.WordDatabase database, IEnumerable<string> units)
+        {
+            List<string> selected = new List<string>(units);
+            allBox.IsChecked = selected.Count == 0;
+            Populate(database, selected);
+        }
+
         private void Populate(NihongoDeskMemo.WordDatabase database, List<string> selected)
         {
             HashSet<string> selectedSet = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
@@ -71,6 +79,7 @@ namespace NihongoDeskMemoWpf
         {
             choices.IsEnabled = !IsAll;
             countText.Text = IsAll ? "全部词库" : "已选 " + SelectedUnits().Count + " 个单元";
+            if (SelectionUpdated != null) SelectionUpdated(this, EventArgs.Empty);
         }
     }
 }
