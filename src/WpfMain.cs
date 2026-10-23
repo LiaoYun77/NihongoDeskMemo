@@ -61,6 +61,7 @@ namespace NihongoDeskMemoWpf
         private bool menuOpen;
         private bool closing;
         private readonly StudySession study;
+        private readonly JapaneseSpeech speech = new JapaneseSpeech();
         private readonly Stack<NihongoDeskMemo.WordItem> previousWords = new Stack<NihongoDeskMemo.WordItem>();
         private ReviewSnapshot lastReview;
         private System.Windows.Forms.NotifyIcon trayIcon;
@@ -257,6 +258,11 @@ namespace NihongoDeskMemoWpf
             Grid.SetColumn(tools, 1);
             header.Children.Add(tools);
 
+            Button speak = ToolButton("▶");
+            speak.ToolTip = "朗读日语（F7）";
+            speak.Click += delegate { SpeakCurrentWord(); };
+            tools.Children.Add(speak);
+
             Button library = ToolButton("词库");
             library.Click += LibraryClick;
             tools.Children.Add(library);
@@ -376,6 +382,7 @@ namespace NihongoDeskMemoWpf
 
         private void GlobalVisibilityChanged(object sender, EventArgs e)
         {
+            if (globalHideHotkey.IsHidden) speech.Stop();
             if (globalHideHotkey.IsHidden) chromeHideTimer.Stop();
             else if (config.BackgroundTransparent && !pseudoHidden) ShowChromeTemporarily();
             UpdateRefreshState();
@@ -467,6 +474,7 @@ namespace NihongoDeskMemoWpf
 
         private void ShowNextWord()
         {
+            speech.Stop();
             if (currentWord != null)
             {
                 if (previousWords.Count >= 100)
@@ -649,6 +657,7 @@ namespace NihongoDeskMemoWpf
 
         private void PreviousClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             while (previousWords.Count > 0)
             {
                 NihongoDeskMemo.WordItem previous = previousWords.Pop();
@@ -663,6 +672,7 @@ namespace NihongoDeskMemoWpf
 
         private void UndoClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             if (lastReview == null || !database.Words.Contains(lastReview.Word)) return;
             ReviewSnapshot after = new ReviewSnapshot(database, lastReview.Word);
             lastReview.Undo();
@@ -704,6 +714,7 @@ namespace NihongoDeskMemoWpf
 
         private void WithDialog(Action action)
         {
+            speech.Stop();
             modalDepth++;
             UpdateRefreshState();
             try { action(); }
@@ -740,6 +751,7 @@ namespace NihongoDeskMemoWpf
             reviewMenu = AddMenu(menu, "到期复习", delegate { SetStudyMode(0); });
             AddMenu(menu, "上一词", delegate { PreviousClick(this, new RoutedEventArgs()); });
             AddMenu(menu, "下一词", ShowNextWord);
+            AddMenu(menu, "朗读日语（F7）", SpeakCurrentWord);
             undoMenu = AddMenu(menu, "撤销上次评级", delegate { UndoClick(this, new RoutedEventArgs()); });
             menu.Items.Add(new Separator());
             AddMenu(menu, "词库管理", delegate { LibraryClick(this, new RoutedEventArgs()); });
@@ -838,6 +850,10 @@ namespace NihongoDeskMemoWpf
 
         private void WindowKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
+            if (e.Key == Key.F7 && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                SpeakCurrentWord(); e.Handled = true; return;
+            }
             if (e.Key == Key.F9)
             {
                 chromePinned = !chromePinned;
@@ -874,6 +890,14 @@ namespace NihongoDeskMemoWpf
                 Rate(rating);
                 e.Handled = true;
             }
+        }
+
+        private void SpeakCurrentWord()
+        {
+            if (pseudoHidden || modalDepth > 0 || (globalHideHotkey != null && globalHideHotkey.IsHidden)) return;
+            string error;
+            if (!speech.TrySpeak(currentWord, config, out error))
+                WithDialog(delegate { MessageBox.Show(this, error, "日语朗读"); });
         }
 
         private void RatingClick(object sender, RoutedEventArgs e)
@@ -1071,6 +1095,7 @@ namespace NihongoDeskMemoWpf
 
         private void HideClick(object sender, RoutedEventArgs e)
         {
+            speech.Stop();
             if (pseudoHidden) return;
             normalBounds = new Rect(Left, Top, Width, Height);
             pseudoHidden = true;
@@ -1104,6 +1129,7 @@ namespace NihongoDeskMemoWpf
 
         private void WindowClosed(object sender, EventArgs e)
         {
+            speech.Dispose();
             closing = true;
             if (globalHideHotkey != null) globalHideHotkey.Dispose();
             if (trayIcon != null)

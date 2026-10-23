@@ -83,6 +83,8 @@ namespace NihongoDeskMemo
         public List<PracticePreset> PracticePresets { get; set; }
         public int ReviewMode { get; set; }
         public int StudyMode { get; set; }
+        public string SpeechVoice { get; set; }
+        public int SpeechRate { get; set; }
         public int WindowX { get; set; }
         public int WindowY { get; set; }
         public int WindowWidth { get; set; }
@@ -101,6 +103,7 @@ namespace NihongoDeskMemo
             PracticeUnit = string.Empty;
             PracticePresets = new List<PracticePreset>();
             ReviewMode = 0;
+            SpeechVoice = string.Empty;
             WindowX = -1;
             WindowY = -1;
             WindowWidth = 300;

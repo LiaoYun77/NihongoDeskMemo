@@ -30,6 +30,7 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Speech" />
     <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
@@ -50,6 +51,7 @@
     <Compile Include="src\ImportPreview.cs" />
     <Compile Include="src\ImportPreviewWindow.cs" />
     <Compile Include="src\ReviewData.cs" />
+    <Compile Include="src\JapaneseSpeech.cs" />
     <Compile Include="src\ReviewHistoryWindow.cs" />
     <Compile Include="src\UnitSelectionControl.cs" />
     <Compile Include="src\VersionInfo.cs" />

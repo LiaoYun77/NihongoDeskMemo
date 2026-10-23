@@ -195,6 +195,8 @@ namespace NihongoDeskMemoWpf
         private Button deletePresetButton;
         private int editingPresetIndex = -1;
         private bool loadingPreset;
+        private ComboBox speechVoiceBox;
+        private Slider speechRateSlider;
 
         public WpfSettingsWindow(
             NihongoDeskMemo.AppConfig appConfig,
@@ -219,7 +221,7 @@ namespace NihongoDeskMemoWpf
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             int i;
-            for (i = 0; i < 11; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 7 || i == 8 ? GridLength.Auto : new GridLength(41) });
+            for (i = 0; i < 13; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 7 || i == 8 ? GridLength.Auto : new GridLength(41) });
             Body.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10) });
 
@@ -266,6 +268,16 @@ namespace NihongoDeskMemoWpf
             };
             Closed += delegate { hideHotkeyBox.EndRecording(); };
             AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 10);
+            speechVoiceBox = UiComboBox();
+            speechVoiceBox.Items.Add("自动选择日语语音");
+            foreach (string voice in JapaneseSpeech.VoiceNames()) speechVoiceBox.Items.Add(voice);
+            if (!string.IsNullOrEmpty(config.SpeechVoice) && !speechVoiceBox.Items.Contains(config.SpeechVoice))
+                speechVoiceBox.Items.Add(config.SpeechVoice);
+            speechVoiceBox.SelectedIndex = string.IsNullOrEmpty(config.SpeechVoice) ? 0 : speechVoiceBox.Items.IndexOf(config.SpeechVoice);
+            AddRow(form, "日语语音", speechVoiceBox, 11);
+            speechRateSlider = new Slider { Minimum = -5, Maximum = 5, TickFrequency = 1, IsSnapToTickEnabled = true,
+                Value = JapaneseSpeech.ClampRate(config.SpeechRate), ToolTip = "语速：-5 慢，0 标准，5 快" };
+            AddRow(form, "朗读语速", speechRateSlider, 12);
             studyModeBox = UiComboBox();
             studyModeBox.Items.Add("到期复习");
             studyModeBox.Items.Add("浏览（不计评级）");
@@ -469,6 +481,8 @@ namespace NihongoDeskMemoWpf
             config.ShowRatingButtons = ratingButtonsBox.IsChecked == true;
             config.ReviewMode = Math.Max(0, modeBox.SelectedIndex);
             config.StudyMode = studyModeBox.SelectedIndex == 1 ? 1 : 0;
+            config.SpeechVoice = speechVoiceBox.SelectedIndex <= 0 ? string.Empty : (string)speechVoiceBox.SelectedItem;
+            config.SpeechRate = (int)speechRateSlider.Value;
             PracticeScope.SetUnits(config, unitSelection.IsAll ? new List<string>() : selected);
             config.PracticePresets = NihongoDeskMemo.PracticePresets.Copy(presetDraft);
             return true;
