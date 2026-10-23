@@ -752,6 +752,11 @@ namespace NihongoDeskMemoWpf
             AddMenu(menu, "上一词", delegate { PreviousClick(this, new RoutedEventArgs()); });
             AddMenu(menu, "下一词", ShowNextWord);
             AddMenu(menu, "朗读日语（F7）", SpeakCurrentWord);
+            AddMenu(menu, "例句与来源", delegate
+            {
+                if (currentWord == null || ActivateExistingDialog()) return;
+                WithDialog(delegate { new WordDetailsWindow(currentWord) { Owner = this }.ShowDialog(); });
+            });
             undoMenu = AddMenu(menu, "撤销上次评级", delegate { UndoClick(this, new RoutedEventArgs()); });
             menu.Items.Add(new Separator());
             AddMenu(menu, "词库管理", delegate { LibraryClick(this, new RoutedEventArgs()); });

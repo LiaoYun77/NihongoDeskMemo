@@ -16,6 +16,9 @@ namespace NihongoDeskMemo
         public string Unit { get; set; }
         public string Status { get; set; }
         public string Original { get; set; }
+        public string ExampleJapanese { get; set; }
+        public string ExampleChinese { get; set; }
+        public string SourceLabel { get; set; }
     }
 
     internal sealed class ImportPreview
@@ -40,8 +43,8 @@ namespace NihongoDeskMemo
                 foreach (WordItem word in database.Words) if (!string.IsNullOrEmpty(word.SourceId)) existing.Add(word.SourceId);
                 int line = 0;
                 foreach (WordItem word in incoming.Words)
-                    plan.AddRow(++line, word, existing.Contains(word.SourceId) ? "已有来源（跳过）" : "新增", word.SourceText);
-                plan.Result = StructuredWordImporter.Import(incoming, plan.candidate);
+                    plan.AddRow(++line, word, existing.Contains(word.SourceId) ? (updateExisting ? "更新词条内容（保留进度）" : "已有来源（跳过）") : "新增", word.SourceText);
+                plan.Result = StructuredWordImporter.Import(incoming, plan.candidate, updateExisting);
                 return plan;
             }
             Encoding encoding = (Encoding)WordImporter.DetectEncoding(path).Clone();
@@ -89,7 +92,8 @@ namespace NihongoDeskMemo
         private void AddRow(int line, WordItem word, string status, string raw)
         {
             Rows.Add(new ImportPreviewRow { Line = line, Japanese = word.Japanese, Reading = word.Pinyin,
-                Chinese = word.Chinese, Unit = word.Unit, Status = status, Original = raw });
+                Chinese = word.Chinese, Unit = word.Unit, Status = status, Original = raw,
+                ExampleJapanese = word.ExampleJapanese, ExampleChinese = word.ExampleChinese, SourceLabel = word.SourceLabel });
         }
 
         public void Apply(WordDatabase database, Action<WordDatabase> save)

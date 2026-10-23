@@ -29,7 +29,7 @@ namespace NihongoDeskMemo
                 incoming = (WordDatabase)serializer.Deserialize(reader);
             if (incoming == null || incoming.Words == null || incoming.Words.Count == 0)
                 throw new InvalidDataException("XML 词库为空或格式不正确。");
-            if (incoming.SchemaVersion > 1) throw new InvalidDataException("不支持该词库版本，请使用新版软件。");
+            if (incoming.SchemaVersion > ReviewData.CurrentSchemaVersion) throw new InvalidDataException("不支持该词库版本，请使用新版软件。");
 
             // Validate every row before touching the current database.
             HashSet<string> incomingIds = new HashSet<string>(StringComparer.Ordinal);
@@ -45,28 +45,58 @@ namespace NihongoDeskMemo
         }
 
         internal static ImportResult Import(WordDatabase incoming, WordDatabase database)
+        { return Import(incoming, database, false); }
+
+        internal static ImportResult Import(WordDatabase incoming, WordDatabase database, bool updateExisting)
         {
-            HashSet<string> existingIds = new HashSet<string>(StringComparer.Ordinal);
+            Dictionary<string, WordItem> existingIds = new Dictionary<string, WordItem>(StringComparer.Ordinal);
             foreach (WordItem item in database.Words)
-                if (!string.IsNullOrEmpty(item.SourceId)) existingIds.Add(item.SourceId);
+                if (!string.IsNullOrEmpty(item.SourceId))
+                {
+                    if (updateExisting && existingIds.ContainsKey(item.SourceId))
+                        throw new InvalidDataException("本地词库来源编号重复，无法确定更新对象：" + item.SourceId);
+                    existingIds[item.SourceId] = item;
+                }
             ImportResult result = new ImportResult();
             foreach (WordItem item in incoming.Words)
             {
-                if (existingIds.Contains(item.SourceId))
+                if (existingIds.ContainsKey(item.SourceId))
                 {
+                    if (updateExisting)
+                    {
+                        CopyContent(item, existingIds[item.SourceId]);
+                        result.Updated++; continue;
+                    }
                     result.Unchanged++;
                     continue;
                 }
-                // Import vocabulary only. Existing progress and edits are never overwritten.
-                database.Words.Add(new WordItem
-                {
-                    Japanese = item.Japanese, Pinyin = item.Pinyin, Chinese = item.Chinese,
-                    Unit = item.Unit, SourceId = item.SourceId, SourceText = item.SourceText
-                });
-                existingIds.Add(item.SourceId);
+                WordItem added = new WordItem();
+                CopyContent(item, added); database.Words.Add(added);
+                existingIds.Add(item.SourceId, added);
                 result.Added++;
             }
             return result;
+        }
+
+        private static void CopyContent(WordItem from, WordItem to)
+        {
+            to.Japanese = from.Japanese; to.Pinyin = from.Pinyin; to.Chinese = from.Chinese;
+            to.Unit = from.Unit; to.SourceId = from.SourceId; to.SourceText = from.SourceText;
+            to.ExampleJapanese = from.ExampleJapanese; to.ExampleChinese = from.ExampleChinese; to.SourceLabel = from.SourceLabel;
+        }
+
+        public static void ExportFile(string path, WordDatabase database)
+        {
+            WordDatabase exported = new WordDatabase { SchemaVersion = ReviewData.CurrentSchemaVersion };
+            HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (WordItem word in database.Words)
+            {
+                WordItem copy = new WordItem(); CopyContent(word, copy);
+                if (string.IsNullOrWhiteSpace(copy.SourceId)) copy.SourceId = "local:" + word.WordId;
+                if (!ids.Add(copy.SourceId)) throw new InvalidDataException("来源编号重复，无法无歧义导出：" + copy.SourceId);
+                exported.Words.Add(copy);
+            }
+            XmlFileStore.Save(path, exported);
         }
     }
 }

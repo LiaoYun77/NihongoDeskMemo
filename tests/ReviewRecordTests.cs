@@ -17,7 +17,7 @@ namespace NihongoDeskMemoWpf
                 Check(typeof(WordItem).GetProperty("WordId") != null, "words have a stable identity independent of source IDs");
                 ReviewData.Normalize(database);
                 string id = word.WordId, future = word.NextReviewTime;
-                Check(database.SchemaVersion == 1 && word.DirectionStates.Count == 4 && database.ReviewEvents.Count == 0,
+                Check(database.SchemaVersion == ReviewData.CurrentSchemaVersion && word.DirectionStates.Count == 4 && database.ReviewEvents.Count == 0,
                     "legacy migration creates four baseline states without fabricated history");
                 Check(ReviewData.For(word, 3).ReviewCount == 6 && ReviewData.For(word, 3).NextReviewTime == future,
                     "legacy counts and due time retained");
@@ -46,10 +46,10 @@ namespace NihongoDeskMemoWpf
                 Check(!StudySession.Eligible(fresh, scope), "reviewed recall follows its own due time");
                 VerifyRoundTrip(database, word);
                 bool rejected = false;
-                database.SchemaVersion = 2;
+                database.SchemaVersion = ReviewData.CurrentSchemaVersion + 1;
                 try { ReviewData.Normalize(database); } catch (InvalidDataException) { rejected = true; }
                 Check(rejected, "unsupported future schema rejected");
-                database.SchemaVersion = 1;
+                database.SchemaVersion = ReviewData.CurrentSchemaVersion;
                 fresh.WordId = word.WordId;
                 rejected = false;
                 try { ReviewData.Normalize(database); } catch (InvalidDataException) { rejected = true; }

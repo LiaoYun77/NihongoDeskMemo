@@ -38,24 +38,28 @@ namespace NihongoDeskMemo
 
     internal static class ReviewData
     {
+        public const int CurrentSchemaVersion = 2;
         public static readonly string[] DirectionNames = { "日语认中文", "中文回忆日语", "假名回忆汉字", "汉字回忆读音" };
         public static readonly string[] RatingNames = { "", "不会", "模糊", "记得", "熟练" };
 
         public static string BackupLegacy(string source, string directory)
+        { return BackupLegacy(source, directory, "v0.5"); }
+
+        public static string BackupLegacy(string source, string directory, string version)
         {
             string digest;
             using (SHA256 hash = SHA256.Create())
             using (FileStream stream = File.OpenRead(source)) digest = BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "");
             string backups = Path.Combine(directory, "backups");
             Directory.CreateDirectory(backups);
-            string path = Path.Combine(backups, "words-pre-v0.5-" + digest + ".xml");
+            string path = Path.Combine(backups, "words-pre-" + version + "-" + digest + ".xml");
             if (!File.Exists(path)) File.Copy(source, path, false);
             return path;
         }
 
         public static void Normalize(WordDatabase database)
         {
-            if (database.SchemaVersion > 1) throw new InvalidDataException("词库格式较新，请使用对应新版软件，避免丢失数据。");
+            if (database.SchemaVersion > CurrentSchemaVersion) throw new InvalidDataException("词库格式较新，请使用对应新版软件，避免丢失数据。");
             HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (WordItem word in database.Words)
             {
@@ -68,7 +72,7 @@ namespace NihongoDeskMemo
                 if (entry == null || string.IsNullOrWhiteSpace(entry.EventId) || string.IsNullOrWhiteSpace(entry.WordId) ||
                     !ids.Add(entry.EventId) || entry.Direction < 0 || entry.Direction > 3 || entry.Rating < 1 || entry.Rating > 4)
                     throw new InvalidDataException("复习记录格式异常，已停止保存，请保留原文件与备份。");
-            database.SchemaVersion = 1;
+            database.SchemaVersion = CurrentSchemaVersion;
         }
 
         public static void EnsureWord(WordItem word)

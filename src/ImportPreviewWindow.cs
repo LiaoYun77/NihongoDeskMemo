@@ -27,8 +27,9 @@ namespace NihongoDeskMemoWpf
             Body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) });
             summary = UiLabel(string.Empty); summary.TextWrapping = TextWrapping.Wrap;
             Body.Children.Add(summary);
-            updateBox = new CheckBox { Content = "更新已有单词的读音和意思", Foreground = System.Windows.Media.Brushes.White,
-                VerticalAlignment = VerticalAlignment.Center, IsEnabled = !string.Equals(Path.GetExtension(file), ".xml", StringComparison.OrdinalIgnoreCase) };
+            updateBox = new CheckBox { Content = string.Equals(Path.GetExtension(file), ".xml", StringComparison.OrdinalIgnoreCase)
+                ? "按来源编号更新词条内容（保留本地复习进度）" : "更新已有单词的读音和意思", Foreground = System.Windows.Media.Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center };
             Grid.SetRow(updateBox, 1); Body.Children.Add(updateBox);
             grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
                 HeadersVisibility = DataGridHeadersVisibility.Column, ColumnHeaderStyle = HeaderStyle(),
@@ -37,6 +38,7 @@ namespace NihongoDeskMemoWpf
             AddColumn("Line", "行", 45); AddColumn("Status", "处理", 205); AddColumn("Japanese", "单词", 130);
             AddColumn("Reading", "假名", 130); AddColumn("Chinese", "意思", 200); AddColumn("Unit", "单元", 90);
             AddColumn("Original", "原文", 300);
+            AddColumn("ExampleJapanese", "日语例句", 240); AddColumn("ExampleChinese", "例句翻译", 240); AddColumn("SourceLabel", "来源", 160);
             Grid.SetRow(grid, 2); Body.Children.Add(grid);
             StackPanel footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Bottom };

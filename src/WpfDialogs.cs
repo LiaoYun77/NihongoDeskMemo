@@ -539,6 +539,9 @@ namespace NihongoDeskMemoWpf
             AddTextColumn("Pinyin", "假名/读音", 130, false);
             AddTextColumn("Chinese", "意思", 220, false);
             AddTextColumn("Unit", "单元", 100, false);
+            AddTextColumn("ExampleJapanese", "日语例句", 240, false);
+            AddTextColumn("ExampleChinese", "例句翻译", 240, false);
+            AddTextColumn("SourceLabel", "来源", 160, false);
             AddTextColumn("Weight", "权重", 58, false);
             DataGridCheckBoxColumn marked = new DataGridCheckBoxColumn();
             marked.Header = "标记";
@@ -584,6 +587,18 @@ namespace NihongoDeskMemoWpf
                 new ReviewHistoryWindow(database, selected) { Owner = this }.ShowDialog();
             };
             actions.Children.Add(history);
+            Button export = UiButton("导出");
+            export.Click += delegate
+            {
+                if (!SaveDatabase()) return;
+                Microsoft.Win32.SaveFileDialog dialog = new Microsoft.Win32.SaveFileDialog { Title = "导出完整词表（不含复习进度）", Filter = "XML 词表|*.xml", FileName = "vocabulary.xml" };
+                if (dialog.ShowDialog(this) != true) return;
+                if (string.Equals(System.IO.Path.GetFullPath(dialog.FileName), System.IO.Path.GetFullPath(NihongoDeskMemo.Storage.DatabasePath), StringComparison.OrdinalIgnoreCase))
+                { MessageBox.Show(this, "请选择其他文件名，不能覆盖正在使用的词库。", "导出取消"); return; }
+                try { NihongoDeskMemo.StructuredWordImporter.ExportFile(dialog.FileName, database); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "导出失败"); }
+            };
+            actions.Children.Add(export);
             Button add = UiButton("新增");
             add.Click += AddClick;
             actions.Children.Add(add);
@@ -629,7 +644,8 @@ namespace NihongoDeskMemoWpf
             {
                 NihongoDeskMemo.WordItem item = database.Words[i];
                 if (query.Length == 0 || Contains(item.Japanese, query) || Contains(item.Pinyin, query) ||
-                    Contains(item.Chinese, query) || Contains(item.Unit, query)) shown.Add(item);
+                    Contains(item.Chinese, query) || Contains(item.Unit, query) || Contains(item.ExampleJapanese, query) ||
+                    Contains(item.ExampleChinese, query) || Contains(item.SourceLabel, query)) shown.Add(item);
             }
             grid.ItemsSource = shown;
             countText.Text = "显示 " + shown.Count.ToString() + " 条 / 共 " + database.Words.Count.ToString() + " 条";

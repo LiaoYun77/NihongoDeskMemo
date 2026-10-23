@@ -24,7 +24,7 @@ $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'Sy
 $references += '/reference:' + (Join-Path $referenceRoot 'System.Speech.dll')
 $sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs',
     'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs', 'HotkeyGesture.cs', 'HotkeyRecorder.cs',
-    'StudySession.cs', 'XmlFileStore.cs', 'PracticePresets.cs', 'ImportPreview.cs', 'ImportPreviewWindow.cs', 'ReviewData.cs', 'ReviewHistoryWindow.cs', 'JapaneseSpeech.cs') |
+    'StudySession.cs', 'XmlFileStore.cs', 'PracticePresets.cs', 'ImportPreview.cs', 'ImportPreviewWindow.cs', 'ReviewData.cs', 'ReviewHistoryWindow.cs', 'JapaneseSpeech.cs', 'WordDetailsWindow.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)
@@ -72,6 +72,10 @@ if ($RunTests -or $IncludeDesktopTests) {
     Compile 'exe' 'NihongoDeskMemoWpf.SpeechTests' $speechTest ($sources + (Join-Path $root 'tests\SpeechTests.cs'))
     & $speechTest
     if ($LASTEXITCODE -ne 0) { throw 'Speech tests failed.' }
+    $contentTest = Join-Path $testOutput 'ContentTests.exe'
+    Compile 'exe' 'NihongoDeskMemoWpf.ContentTests' $contentTest ($sources + (Join-Path $root 'tests\ContentTests.cs'))
+    & $contentTest
+    if ($LASTEXITCODE -ne 0) { throw 'Content tests failed.' }
     if ($IncludeDesktopTests) {
         Write-Host 'Desktop tests temporarily register/send F10-F12 and Ctrl+Shift+Q. Close running copies first.'
         $desktopTest = Join-Path $testOutput 'GlobalHideTests.exe'

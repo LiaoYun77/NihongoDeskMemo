@@ -30,6 +30,9 @@ namespace NihongoDeskMemo
         public string Unit { get; set; }
         public string SourceId { get; set; }
         public string SourceText { get; set; }
+        public string ExampleJapanese { get; set; }
+        public string ExampleChinese { get; set; }
+        public string SourceLabel { get; set; }
         public int Weight { get; set; }
         public bool Marked { get; set; }
         public int SeenCount { get; set; }
@@ -45,6 +48,9 @@ namespace NihongoDeskMemo
             Unit = string.Empty;
             SourceId = string.Empty;
             SourceText = string.Empty;
+            ExampleJapanese = string.Empty;
+            ExampleChinese = string.Empty;
+            SourceLabel = string.Empty;
             Weight = 1;
             LastSeenUtc = string.Empty;
             LastReviewTime = string.Empty;
@@ -130,7 +136,7 @@ namespace NihongoDeskMemo
             string path = LoadPath(DatabasePath, LegacyDatabasePath);
             string source;
             WordDatabase database = XmlFileStore.Load<WordDatabase>(path, new WordDatabase(), out source);
-            if (database.SchemaVersion == 0 && source != null) ReviewData.BackupLegacy(source, AppDirectory);
+            if (database.SchemaVersion < ReviewData.CurrentSchemaVersion && source != null) ReviewData.BackupLegacy(source, AppDirectory, "v0.6");
             NormalizeDatabase(database);
             return database;
         }
