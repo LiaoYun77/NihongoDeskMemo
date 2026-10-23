@@ -10,7 +10,9 @@ namespace NihongoDeskMemoWpf
     {
         private static void Main(string[] args)
         {
-            string temp = Path.Combine(Path.GetTempPath(), "NihongoImport-" + Guid.NewGuid().ToString("N") + ".xml");
+            string directory = Path.Combine(Path.GetTempPath(), "NihongoImport-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            string temp = Path.Combine(directory, "words.xml");
             try
             {
                 Check(typeof(WordImporter).GetMethod("PreviewFile", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public) != null,
@@ -46,7 +48,7 @@ namespace NihongoDeskMemoWpf
                 Console.WriteLine("Import tests passed.");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
-            finally { if (File.Exists(temp)) File.Delete(temp); }
+            finally { Directory.Delete(directory, true); }
         }
 
         private static WordItem Item(string id, string unit)

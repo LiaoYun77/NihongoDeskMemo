@@ -504,7 +504,7 @@ namespace NihongoDeskMemoWpf
             ApplyReviewDisplay();
             statusText.Text = (config.StudyMode == 1 ? "浏览" : "复习") + " · " + ModeName() + "  ·  " +
                 PracticeScope.Summary(config) +
-                "  ·  复习 " + currentWord.ReviewCount.ToString();
+                "  ·  复习 " + NihongoDeskMemo.ReviewData.For(currentWord, config.ReviewMode).ReviewCount.ToString();
             UpdateAnswerState();
             timer.Stop();
             UpdateRefreshState();
@@ -612,7 +612,7 @@ namespace NihongoDeskMemoWpf
                 NihongoDeskMemo.WordItem item = database.Words[i];
                 if (!InPracticeUnit(item) || !EligibleForMode(item)) continue;
                 DateTime next;
-                if (TryParseUtc(item.NextReviewTime, out next) && next < nextDue)
+                if (TryParseUtc(NihongoDeskMemo.ReviewData.For(item, config.ReviewMode).NextReviewTime, out next) && next < nextDue)
                 {
                     nextDue = next;
                     found = true;
@@ -639,8 +639,8 @@ namespace NihongoDeskMemoWpf
         private void Rate(int rating)
         {
             if (currentWord == null || viewingHistory || !ReviewPresentation.CanRateWithKeyboard(config, answerVisible)) return;
-            ReviewSnapshot before = new ReviewSnapshot(currentWord);
-            ReviewActions.Rate(currentWord, rating, DateTime.UtcNow);
+            ReviewSnapshot before = new ReviewSnapshot(database, currentWord);
+            ReviewActions.Rate(database, currentWord, config.ReviewMode, rating, DateTime.UtcNow);
             try { NihongoDeskMemo.Storage.SaveDatabase(database); }
             catch (Exception ex) { before.Restore(); MessageBox.Show(this, "评级未保存：" + ex.Message, "保存失败"); return; }
             lastReview = before;
@@ -664,8 +664,8 @@ namespace NihongoDeskMemoWpf
         private void UndoClick(object sender, RoutedEventArgs e)
         {
             if (lastReview == null || !database.Words.Contains(lastReview.Word)) return;
-            ReviewSnapshot after = new ReviewSnapshot(lastReview.Word);
-            lastReview.Restore();
+            ReviewSnapshot after = new ReviewSnapshot(database, lastReview.Word);
+            lastReview.Undo();
             try { NihongoDeskMemo.Storage.SaveDatabase(database); }
             catch (Exception ex) { after.Restore(); MessageBox.Show(this, "撤销未保存：" + ex.Message, "保存失败"); return; }
             currentWord = lastReview.Word;
@@ -819,12 +819,17 @@ namespace NihongoDeskMemoWpf
                 {
                     NihongoDeskMemo.WordDatabase restored = NihongoDeskMemo.XmlFileStore.Load<NihongoDeskMemo.WordDatabase>(dialog.FileName, null);
                     if (restored == null || restored.Words == null) throw new InvalidOperationException("不是有效的词库备份。");
+                    NihongoDeskMemo.ReviewData.Normalize(restored);
                     if (MessageBox.Show(this, "恢复 " + restored.Words.Count + " 条词条及其复习进度？当前词库会先备份。", "确认恢复", MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
                     NihongoDeskMemo.Storage.BackupDatabase();
                     List<NihongoDeskMemo.WordItem> original = database.Words;
+                    List<NihongoDeskMemo.ReviewEvent> originalEvents = database.ReviewEvents;
+                    int originalSchema = database.SchemaVersion;
                     database.Words = restored.Words;
+                    database.ReviewEvents = restored.ReviewEvents;
+                    database.SchemaVersion = restored.SchemaVersion;
                     try { NihongoDeskMemo.Storage.SaveDatabase(database); }
-                    catch { database.Words = original; throw; }
+                    catch { database.Words = original; database.ReviewEvents = originalEvents; database.SchemaVersion = originalSchema; throw; }
                     ResetSession(); ShowNextWord();
                 }
                 catch (Exception ex) { MessageBox.Show(this, ex.Message, "恢复未完成"); }
@@ -1023,6 +1028,7 @@ namespace NihongoDeskMemoWpf
                 item.CorrectStreak = 0;
                 item.Difficulty = 5.0;
                 item.IntervalDays = 0;
+                item.DirectionStates.Clear();
             }
             NihongoDeskMemo.Storage.SaveDatabase(database);
             ResetSession(); ShowNextWord();

@@ -29,6 +29,7 @@ namespace NihongoDeskMemo
                 incoming = (WordDatabase)serializer.Deserialize(reader);
             if (incoming == null || incoming.Words == null || incoming.Words.Count == 0)
                 throw new InvalidDataException("XML 词库为空或格式不正确。");
+            if (incoming.SchemaVersion > 1) throw new InvalidDataException("不支持该词库版本，请使用新版软件。");
 
             // Validate every row before touching the current database.
             HashSet<string> incomingIds = new HashSet<string>(StringComparer.Ordinal);

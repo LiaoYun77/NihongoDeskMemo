@@ -20,8 +20,10 @@ namespace NihongoDeskMemo
         }
     }
 
-    public class WordItem
+    public class WordItem : ReviewState
     {
+        public string WordId { get; set; }
+        public List<DirectionProgress> DirectionStates { get; set; }
         public string Japanese { get; set; }
         public string Pinyin { get; set; }
         public string Chinese { get; set; }
@@ -32,16 +34,11 @@ namespace NihongoDeskMemo
         public bool Marked { get; set; }
         public int SeenCount { get; set; }
         public string LastSeenUtc { get; set; }
-        public string LastReviewTime { get; set; }
-        public string NextReviewTime { get; set; }
-        public int ReviewCount { get; set; }
-        public int WrongCount { get; set; }
-        public int CorrectStreak { get; set; }
-        public double Difficulty { get; set; }
-        public int IntervalDays { get; set; }
 
         public WordItem()
         {
+            WordId = Guid.NewGuid().ToString("N");
+            DirectionStates = new List<DirectionProgress>();
             Japanese = string.Empty;
             Pinyin = string.Empty;
             Chinese = string.Empty;
@@ -58,11 +55,14 @@ namespace NihongoDeskMemo
 
     public class WordDatabase
     {
+        public int SchemaVersion { get; set; }
         public List<WordItem> Words { get; set; }
+        public List<ReviewEvent> ReviewEvents { get; set; }
 
         public WordDatabase()
         {
             Words = new List<WordItem>();
+            ReviewEvents = new List<ReviewEvent>();
         }
     }
 
@@ -124,8 +124,10 @@ namespace NihongoDeskMemo
         public static WordDatabase LoadDatabase()
         {
             EnsureDirectory();
-            string path = File.Exists(DatabasePath) ? DatabasePath : LegacyDatabasePath;
-            WordDatabase database = LoadXml<WordDatabase>(path, new WordDatabase());
+            string path = LoadPath(DatabasePath, LegacyDatabasePath);
+            string source;
+            WordDatabase database = XmlFileStore.Load<WordDatabase>(path, new WordDatabase(), out source);
+            if (database.SchemaVersion == 0 && source != null) ReviewData.BackupLegacy(source, AppDirectory);
             NormalizeDatabase(database);
             return database;
         }
@@ -133,7 +135,7 @@ namespace NihongoDeskMemo
         public static AppConfig LoadConfig()
         {
             EnsureDirectory();
-            string path = File.Exists(ConfigPath) ? ConfigPath : LegacyConfigPath;
+            string path = LoadPath(ConfigPath, LegacyConfigPath);
             AppConfig config = LoadXml<AppConfig>(path, new AppConfig());
             config.PracticeUnit = SafeTrim(config.PracticeUnit);
             if (config.ReviewMode < 0 || config.ReviewMode > 3)
@@ -168,6 +170,11 @@ namespace NihongoDeskMemo
             EnsureDirectory();
             NormalizeDatabase(database);
             SaveXml(DatabasePath, database);
+        }
+
+        internal static string LoadPath(string local, string legacy)
+        {
+            return File.Exists(local) || File.Exists(local + ".bak") ? local : legacy;
         }
 
         public static string BackupDatabase()
@@ -234,6 +241,7 @@ namespace NihongoDeskMemo
                     item.Weight = 80;
                 }
             }
+            ReviewData.Normalize(database);
         }
 
         public static string SafeTrim(string value)

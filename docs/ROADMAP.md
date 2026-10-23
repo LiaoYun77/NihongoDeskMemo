@@ -18,12 +18,14 @@ Release publication is confirmed only after the GitHub release and assets exist.
 
 - [x] Named multi-unit practice presets: create, update, rename, delete, apply.
 - [x] Draft-only settings edits, legacy config and missing-unit compatibility.
-- [ ] Import preview with missing-field and duplicate checks before confirmation.
-- [ ] Stable word identities and individual review events.
-- [ ] Separate progress for recognition, recall and reading directions.
-- [ ] Full-version compatibility, backup checks, PR, CI and release verification.
+- [x] Import preview with missing-field and duplicate checks before confirmation.
+- [x] Stable word identities and individual review events.
+- [x] Separate progress for recognition, recall and reading directions.
+- [x] Full-version compatibility, backups, native desktop and 2142-entry source integrity checks.
+- [ ] Final PR CI, review and release verification.
 
-The first slice is not the complete v0.5.0 release. See V0.5-SPEC.md.
+All feature modules are implemented; full-version verification and publication
+remain distinct steps. See V0.5-SPEC.md.
 
 ## v0.6.0 - Japanese Learning Content (Planned)
 

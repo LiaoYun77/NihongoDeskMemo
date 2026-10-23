@@ -31,6 +31,7 @@ namespace NihongoDeskMemoWpf
                 VerticalAlignment = VerticalAlignment.Center, IsEnabled = !string.Equals(Path.GetExtension(file), ".xml", StringComparison.OrdinalIgnoreCase) };
             Grid.SetRow(updateBox, 1); Body.Children.Add(updateBox);
             grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
+                HeadersVisibility = DataGridHeadersVisibility.Column, ColumnHeaderStyle = HeaderStyle(),
                 RowHeight = 30, Background = UiBrush("#FF182331"), RowBackground = UiBrush("#FF182331"),
                 AlternatingRowBackground = UiBrush("#FF223041"), Foreground = System.Windows.Media.Brushes.White };
             AddColumn("Line", "行", 45); AddColumn("Status", "处理", 205); AddColumn("Japanese", "单词", 130);

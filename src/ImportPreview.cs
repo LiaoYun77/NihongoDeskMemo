@@ -97,9 +97,10 @@ namespace NihongoDeskMemo
             if (!CanApply) throw new InvalidOperationException("预览含有错误或没有可导入的更改。");
             if (Fingerprint(database) != originalHash) throw new InvalidOperationException("词库已变化，请重新预览。");
             List<WordItem> original = database.Words;
+            int schema = database.SchemaVersion;
             database.Words = candidate.Words;
             try { save(database); }
-            catch { database.Words = original; throw; }
+            catch { database.Words = original; database.SchemaVersion = schema; throw; }
         }
 
         private static byte[] Serialize(WordDatabase database)

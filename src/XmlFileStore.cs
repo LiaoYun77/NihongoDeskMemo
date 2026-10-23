@@ -13,14 +13,22 @@ namespace NihongoDeskMemo
 
         public static T Load<T>(string path, T fallback)
         {
+            string source;
+            return Load(path, fallback, out source);
+        }
+
+        public static T Load<T>(string path, T fallback, out string source)
+        {
+            source = path;
             T value;
             if (TryRead(path, out value)) return value;
             if (TryRead(path + ".bak", out value))
             {
+                source = path + ".bak";
                 recoveries.Add(Path.GetFileName(path) + " 无法读取，已从上次成功保存的备份载入。原文件仍保留。");
                 return value;
             }
-            if (!File.Exists(path) && !File.Exists(path + ".bak")) return fallback;
+            if (!File.Exists(path) && !File.Exists(path + ".bak")) { source = null; return fallback; }
             throw new InvalidDataException(Path.GetFileName(path) + " 与其备份均无法读取。请从 backups 恢复，避免覆盖原数据。");
         }
 

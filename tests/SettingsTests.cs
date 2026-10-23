@@ -97,8 +97,8 @@ namespace NihongoDeskMemoWpf
                         seen.Add(chosen.Unit);
                     }
                     Check(seen.Count == 2, "both selected units can be drawn");
-                    data.Words[0].NextReviewTime = DateTime.UtcNow.AddDays(2).ToString("o");
-                    data.Words[2].NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
+                    ReviewData.For(data.Words[0], 0).NextReviewTime = DateTime.UtcNow.AddDays(2).ToString("o");
+                    ReviewData.For(data.Words[2], 0).NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
                     Check(pick.Invoke(main, null) == null, "no fallback to unselected units when selected ones are not due");
                 }
                 finally { main.Close(); }

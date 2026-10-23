@@ -48,6 +48,7 @@ namespace NihongoDeskMemoWpf
 
             TextBlock titleText = new TextBlock();
             titleText.Text = title;
+            titleText.TextTrimming = TextTrimming.CharacterEllipsis;
             titleText.Foreground = UiBrush("#FFF4F7FA");
             titleText.FontSize = 15;
             titleText.FontWeight = FontWeights.SemiBold;
@@ -87,6 +88,19 @@ namespace NihongoDeskMemoWpf
             button.Padding = new Thickness(10, 5, 10, 5);
             button.Margin = new Thickness(4, 0, 0, 0);
             button.Cursor = Cursors.Hand;
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
+            frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            frame.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            FrameworkElementFactory content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            frame.AppendChild(content); template.VisualTree = frame;
+            Trigger disabled = new Trigger { Property = IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(OpacityProperty, 0.35)); template.Triggers.Add(disabled);
+            button.Template = template;
             return button;
         }
 
@@ -118,6 +132,16 @@ namespace NihongoDeskMemoWpf
             box.BorderBrush = UiBrush("#FF607086");
             box.Padding = new Thickness(6, 4, 6, 4);
             return box;
+        }
+
+        protected static Style HeaderStyle()
+        {
+            Style style = new Style(typeof(DataGridColumnHeader));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, UiBrush("#FF293748")));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, UiBrush("#FF526176")));
+            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(7, 6, 7, 6)));
+            return style;
         }
 
         private void HeaderMouseDown(object sender, MouseButtonEventArgs e)
@@ -301,21 +325,6 @@ namespace NihongoDeskMemoWpf
             };
             Grid.SetColumn(save, 1); row.Children.Add(save);
             deletePresetButton = UiButton("×");
-            ControlTemplate deleteTemplate = new ControlTemplate(typeof(Button));
-            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
-            frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
-            frame.SetValue(Border.BorderThicknessProperty, new Thickness(1));
-            frame.SetValue(Border.PaddingProperty, new Thickness(10, 5, 10, 5));
-            FrameworkElementFactory icon = new FrameworkElementFactory(typeof(ContentPresenter));
-            icon.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            icon.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-            frame.AppendChild(icon);
-            deleteTemplate.VisualTree = frame;
-            Trigger disabled = new Trigger { Property = IsEnabledProperty, Value = false };
-            disabled.Setters.Add(new Setter(OpacityProperty, 0.35));
-            deleteTemplate.Triggers.Add(disabled);
-            deletePresetButton.Template = deleteTemplate;
             deletePresetButton.ToolTip = "删除当前编辑的课程方案";
             deletePresetButton.Click += delegate { DeletePreset(); };
             Grid.SetColumn(deletePresetButton, 2); row.Children.Add(deletePresetButton);
@@ -416,7 +425,7 @@ namespace NihongoDeskMemoWpf
 
         private void ResetClick(object sender, RoutedEventArgs e)
         {
-            if (MessageBox.Show(this, "确定清空所有词条的复习进度吗？", "确认", MessageBoxButton.OKCancel) == MessageBoxResult.OK && resetAction != null)
+            if (MessageBox.Show(this, "重置所有方向的复习进度？历史评级记录仍会保留。", "确认", MessageBoxButton.OKCancel) == MessageBoxResult.OK && resetAction != null)
             {
                 resetAction();
             }
@@ -552,6 +561,15 @@ namespace NihongoDeskMemoWpf
             StackPanel actions = new StackPanel { Orientation = Orientation.Horizontal };
             Grid.SetColumn(actions, 1);
             footer.Children.Add(actions);
+            Button history = UiButton("复习记录");
+            history.Click += delegate
+            {
+                grid.CommitEdit(DataGridEditingUnit.Row, true);
+                NihongoDeskMemo.WordItem selected = grid.SelectedItem as NihongoDeskMemo.WordItem;
+                if (selected == null) { MessageBox.Show(this, "请先选择一个单词。", "复习记录"); return; }
+                new ReviewHistoryWindow(database, selected) { Owner = this }.ShowDialog();
+            };
+            actions.Children.Add(history);
             Button add = UiButton("新增");
             add.Click += AddClick;
             actions.Children.Add(add);
@@ -566,16 +584,6 @@ namespace NihongoDeskMemoWpf
             Closing += WindowClosing;
             PopulateUnitBox();
             RefreshGrid();
-        }
-
-        private static Style HeaderStyle()
-        {
-            Style style = new Style(typeof(DataGridColumnHeader));
-            style.Setters.Add(new Setter(Control.BackgroundProperty, UiBrush("#FF293748")));
-            style.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
-            style.Setters.Add(new Setter(Control.BorderBrushProperty, UiBrush("#FF526176")));
-            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(7, 6, 7, 6)));
-            return style;
         }
 
         private void AddTextColumn(string property, string header, double width, bool readOnly)
@@ -632,7 +640,7 @@ namespace NihongoDeskMemoWpf
                 NihongoDeskMemo.WordItem item = selected as NihongoDeskMemo.WordItem;
                 if (item != null) item.Unit = unit;
             }
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            if (!SaveDatabase()) return;
             PopulateUnitBox();
             RefreshGrid();
         }
@@ -669,23 +677,27 @@ namespace NihongoDeskMemoWpf
             RefreshGrid();
         }
 
-        private void SaveDatabase()
+        private bool SaveDatabase()
         {
-            grid.CommitEdit(DataGridEditingUnit.Cell, true);
-            grid.CommitEdit(DataGridEditingUnit.Row, true);
+            if (!grid.CommitEdit(DataGridEditingUnit.Cell, true) || !grid.CommitEdit(DataGridEditingUnit.Row, true)) return false;
             int i;
             for (i = database.Words.Count - 1; i >= 0; i--)
             {
                 NihongoDeskMemo.WordItem item = database.Words[i];
                 if (item == null || NihongoDeskMemo.Storage.SafeTrim(item.Japanese).Length == 0 ||
-                    NihongoDeskMemo.Storage.SafeTrim(item.Chinese).Length == 0) database.Words.RemoveAt(i);
+                    NihongoDeskMemo.Storage.SafeTrim(item.Chinese).Length == 0)
+                {
+                    MessageBox.Show(this, "第 " + (i + 1) + " 条缺少单词或意思，请补全或明确删除。", "词库未保存");
+                    return false;
+                }
             }
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            try { NihongoDeskMemo.Storage.SaveDatabase(database); return true; }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "词库未保存"); return false; }
         }
 
         private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            SaveDatabase();
+            e.Cancel = !SaveDatabase();
         }
     }
 }

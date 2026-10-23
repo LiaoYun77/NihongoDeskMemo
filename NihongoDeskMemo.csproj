@@ -49,6 +49,8 @@
     <Compile Include="src\PracticePresets.cs" />
     <Compile Include="src\ImportPreview.cs" />
     <Compile Include="src\ImportPreviewWindow.cs" />
+    <Compile Include="src\ReviewData.cs" />
+    <Compile Include="src\ReviewHistoryWindow.cs" />
     <Compile Include="src\UnitSelectionControl.cs" />
     <Compile Include="src\VersionInfo.cs" />
   </ItemGroup>
