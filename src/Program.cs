@@ -2244,6 +2244,10 @@ namespace NihongoDeskMemo
 
     internal static class WordImporter
     {
+        public static ImportPreview PreviewFile(string path, WordDatabase database, bool updateExisting)
+        {
+            return ImportPreview.Prepare(path, database, updateExisting);
+        }
         private static readonly char[] SimpleSeparators = new char[] { '\t', ',', '，', '=', '：', ':' };
         private static readonly string[] WideSeparators = new string[] { " - ", " -- ", " —— ", " — " };
 
@@ -2345,7 +2349,7 @@ namespace NihongoDeskMemo
         //    return item;
         //}
 
-        private static WordItem ParseLine(string rawLine)
+        internal static WordItem ParseLine(string rawLine)
         {
             if (rawLine == null)
             {
@@ -2492,10 +2496,7 @@ namespace NihongoDeskMemo
             for (i = 0; i < rawParts.Length; i++)
             {
                 string value = Storage.SafeTrim(rawParts[i]);
-                if (value.Length > 0)
-                {
-                    parts.Add(value);
-                }
+                parts.Add(value);
             }
             return parts;
         }
@@ -2520,7 +2521,7 @@ namespace NihongoDeskMemo
             return Storage.SafeTrim(value).ToLowerInvariant();
         }
 
-        private static Encoding DetectEncoding(string path)
+        internal static Encoding DetectEncoding(string path)
         {
             byte[] bom = new byte[4];
             using (FileStream stream = File.OpenRead(path))

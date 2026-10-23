@@ -13,6 +13,8 @@ namespace NihongoDeskMemoWpf
             string temp = Path.Combine(Path.GetTempPath(), "NihongoImport-" + Guid.NewGuid().ToString("N") + ".xml");
             try
             {
+                Check(typeof(WordImporter).GetMethod("PreviewFile", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public) != null,
+                    "import can be previewed without mutating the library");
                 WordDatabase source = new WordDatabase();
                 source.Words.Add(Item("source:1", "lesson1"));
                 source.Words.Add(Item("source:2", "lesson2"));
@@ -40,6 +42,7 @@ namespace NihongoDeskMemoWpf
                 File.WriteAllText(temp, "<WordDatabase><Words/><Unexpected>data</Unexpected></WordDatabase>");
                 MustFail(temp, target, "unknown fields are rejected rather than discarded");
                 if (args.Length > 0) VerifyTextbook(args[0], temp);
+                CheckPreview(temp);
                 Console.WriteLine("Import tests passed.");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
@@ -50,6 +53,41 @@ namespace NihongoDeskMemoWpf
         {
             return new WordItem { Japanese = "same", Pinyin = "reading", Chinese = "meaning, with punctuation",
                 Unit = unit, SourceId = id, SourceText = "original line 1\noriginal line 2 <&>" };
+        }
+
+        private static void CheckPreview(string xmlPath)
+        {
+            string textPath = Path.ChangeExtension(xmlPath, ".txt");
+            try
+            {
+                WordDatabase target = new WordDatabase();
+                WordItem original = new WordItem { Japanese = "会社員", Pinyin = "old", Chinese = "旧意思", Unit = "A",
+                    ReviewCount = 9, SourceText = "keep original" };
+                target.Words.Add(original);
+                File.WriteAllText(textPath, "会社員,かいしゃいん,公司职员\n新語,,新词\n新語,しんご,重复\n,かな,缺单词");
+                ImportPreview invalid = WordImporter.PreviewFile(textPath, target, false);
+                Check(invalid.Errors == 1 && !invalid.CanApply && target.Words.Count == 1, "missing columns block confirmation without mutations");
+                File.WriteAllText(textPath, "会社員,かいしゃいん,公司职员\n新語,,新词\n新語,しんご,重复");
+                ImportPreview safe = WordImporter.PreviewFile(textPath, target, false);
+                Check(safe.CanApply && safe.Result.Added == 1 && safe.Result.Unchanged == 1 && safe.Result.Skipped == 1,
+                    "preview reports new, existing and duplicate rows");
+                Check(original.Chinese == "旧意思" && target.Words.Count == 1, "cancelled preview leaves original references and contents");
+                bool failed = false;
+                try { safe.Apply(target, delegate { throw new IOException("save failure"); }); } catch (IOException) { failed = true; }
+                Check(failed && target.Words.Count == 1 && object.ReferenceEquals(target.Words[0], original), "failed preview save rolls back live library");
+                original.Chinese = "changed while preview open";
+                failed = false;
+                try { safe.Apply(target, delegate { }); } catch (InvalidOperationException) { failed = true; }
+                Check(failed && target.Words.Count == 1, "stale preview rejected");
+                ImportPreview update = WordImporter.PreviewFile(textPath, target, true);
+                update.Apply(target, delegate(WordDatabase value) { XmlFileStore.Save(xmlPath, value); });
+                Check(target.Words[0].Chinese == "公司职员" && target.Words[0].ReviewCount == 9 && target.Words[0].Unit == "A" &&
+                    target.Words[0].SourceText == "keep original", "explicit update changes vocabulary only");
+                Check(target.Words[1].Pinyin == string.Empty && target.Words[1].SourceText == "新語,,新词", "empty kana column and raw source retained");
+                target.Words.Add(new WordItem { Japanese = "会社員", Chinese = "another", Unit = "B" });
+                Check(WordImporter.PreviewFile(textPath, target, true).Errors == 1, "ambiguous same-word update blocked");
+            }
+            finally { if (File.Exists(textPath)) File.Delete(textPath); }
         }
 
         private static void VerifyTextbook(string path, string temp)

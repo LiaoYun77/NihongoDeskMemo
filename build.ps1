@@ -23,7 +23,7 @@ $references += @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'Sy
     ForEach-Object { '/reference:' + (Join-Path $referenceRoot ($_ + '.dll')) }
 $sources = @('Program.cs', 'WpfMain.cs', 'WpfDialogs.cs', 'GlobalHideHotkey.cs', 'StructuredWordImporter.cs',
     'PracticeScope.cs', 'UnitSelectionControl.cs', 'VersionInfo.cs', 'HotkeyGesture.cs', 'HotkeyRecorder.cs',
-    'StudySession.cs', 'XmlFileStore.cs', 'PracticePresets.cs') |
+    'StudySession.cs', 'XmlFileStore.cs', 'PracticePresets.cs', 'ImportPreview.cs', 'ImportPreviewWindow.cs') |
     ForEach-Object { Join-Path $root ('src\' + $_) }
 $output = Join-Path $root 'bin\Release'
 [void][System.IO.Directory]::CreateDirectory($output)

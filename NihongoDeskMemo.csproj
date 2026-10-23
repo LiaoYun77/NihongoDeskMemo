@@ -47,6 +47,8 @@
     <Compile Include="src\StructuredWordImporter.cs" />
     <Compile Include="src\PracticeScope.cs" />
     <Compile Include="src\PracticePresets.cs" />
+    <Compile Include="src\ImportPreview.cs" />
+    <Compile Include="src\ImportPreviewWindow.cs" />
     <Compile Include="src\UnitSelectionControl.cs" />
     <Compile Include="src\VersionInfo.cs" />
   </ItemGroup>

@@ -973,9 +973,12 @@ namespace NihongoDeskMemoWpf
             if (dialog.ShowDialog() != true) return;
             try
             {
-                string backup = NihongoDeskMemo.Storage.BackupDatabase();
-                NihongoDeskMemo.ImportResult result = NihongoDeskMemo.WordImporter.ImportFile(dialog.FileName, database);
-                NihongoDeskMemo.Storage.SaveDatabase(database);
+                ImportPreviewWindow preview = new ImportPreviewWindow(dialog.FileName, database) { Owner = this };
+                if (preview.ShowDialog() != true || preview.Plan == null) return;
+                string backup = string.Empty;
+                preview.Plan.Apply(database, delegate(NihongoDeskMemo.WordDatabase value)
+                { backup = NihongoDeskMemo.Storage.BackupDatabase(); NihongoDeskMemo.Storage.SaveDatabase(value); });
+                NihongoDeskMemo.ImportResult result = preview.Plan.Result;
                 ResetSession(); ShowNextWord();
                 System.Windows.MessageBox.Show(
                     "新增 " + result.Added + " 条，更新 " + result.Updated + " 条，已存在 " + result.Unchanged +
