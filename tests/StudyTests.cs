@@ -21,7 +21,7 @@ namespace NihongoDeskMemoWpf
                 WordItem last = null;
                 for (int i = 0; i < 4; i++) { last = session.Next(database, config); Check(round.Add(last), "no repetition within round"); }
                 Check(session.Next(database, config) != last, "no immediate repetition across rounds");
-                foreach (WordItem word in database.Words) word.NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
+                foreach (WordItem word in database.Words) ReviewData.For(word, 0).NextReviewTime = DateTime.UtcNow.AddDays(3).ToString("o");
                 Check(session.Next(database, config) == null, "review does not use future or other-unit words");
                 config.StudyMode = 1;
                 WordItem browsed = session.Next(database, config);
@@ -53,6 +53,10 @@ namespace NihongoDeskMemoWpf
             string path = Path.Combine(directory, "words.xml");
             try
             {
+                Check(Storage.LoadPath(path, "legacy") == "legacy", "missing local files allow legacy fallback");
+                File.WriteAllText(path + ".bak", "backup");
+                Check(Storage.LoadPath(path, "legacy") == path, "local backup is preferred over legacy fallback when primary is missing");
+                File.Delete(path + ".bak");
                 XmlFileStore.Save(path, new AppConfig { RefreshSeconds = 31 });
                 XmlFileStore.Save(path, new AppConfig { RefreshSeconds = 42 });
                 Check(XmlFileStore.Load(path, new AppConfig()).RefreshSeconds == 42, "atomic save reads new content");

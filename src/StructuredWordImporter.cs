@@ -10,6 +10,11 @@ namespace NihongoDeskMemo
     {
         public static ImportResult ImportFile(string path, WordDatabase database)
         {
+            return Import(ReadFile(path), database);
+        }
+
+        internal static WordDatabase ReadFile(string path)
+        {
             XmlReaderSettings settings = new XmlReaderSettings();
             settings.DtdProcessing = DtdProcessing.Prohibit;
             settings.XmlResolver = null;
@@ -24,6 +29,7 @@ namespace NihongoDeskMemo
                 incoming = (WordDatabase)serializer.Deserialize(reader);
             if (incoming == null || incoming.Words == null || incoming.Words.Count == 0)
                 throw new InvalidDataException("XML 词库为空或格式不正确。");
+            if (incoming.SchemaVersion > 1) throw new InvalidDataException("不支持该词库版本，请使用新版软件。");
 
             // Validate every row before touching the current database.
             HashSet<string> incomingIds = new HashSet<string>(StringComparer.Ordinal);
@@ -35,7 +41,11 @@ namespace NihongoDeskMemo
                 if (!incomingIds.Add(item.SourceId))
                     throw new InvalidDataException("XML 词库包含重复来源编号：" + item.SourceId);
             }
+            return incoming;
+        }
 
+        internal static ImportResult Import(WordDatabase incoming, WordDatabase database)
+        {
             HashSet<string> existingIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (WordItem item in database.Words)
                 if (!string.IsNullOrEmpty(item.SourceId)) existingIds.Add(item.SourceId);

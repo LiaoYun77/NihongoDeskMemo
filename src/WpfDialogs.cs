@@ -48,6 +48,7 @@ namespace NihongoDeskMemoWpf
 
             TextBlock titleText = new TextBlock();
             titleText.Text = title;
+            titleText.TextTrimming = TextTrimming.CharacterEllipsis;
             titleText.Foreground = UiBrush("#FFF4F7FA");
             titleText.FontSize = 15;
             titleText.FontWeight = FontWeights.SemiBold;
@@ -87,6 +88,19 @@ namespace NihongoDeskMemoWpf
             button.Padding = new Thickness(10, 5, 10, 5);
             button.Margin = new Thickness(4, 0, 0, 0);
             button.Cursor = Cursors.Hand;
+            ControlTemplate template = new ControlTemplate(typeof(Button));
+            FrameworkElementFactory frame = new FrameworkElementFactory(typeof(Border));
+            frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            frame.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            FrameworkElementFactory content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            frame.AppendChild(content); template.VisualTree = frame;
+            Trigger disabled = new Trigger { Property = IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(OpacityProperty, 0.35)); template.Triggers.Add(disabled);
+            button.Template = template;
             return button;
         }
 
@@ -118,6 +132,16 @@ namespace NihongoDeskMemoWpf
             box.BorderBrush = UiBrush("#FF607086");
             box.Padding = new Thickness(6, 4, 6, 4);
             return box;
+        }
+
+        protected static Style HeaderStyle()
+        {
+            Style style = new Style(typeof(DataGridColumnHeader));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, UiBrush("#FF293748")));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
+            style.Setters.Add(new Setter(Control.BorderBrushProperty, UiBrush("#FF526176")));
+            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(7, 6, 7, 6)));
+            return style;
         }
 
         private void HeaderMouseDown(object sender, MouseButtonEventArgs e)
@@ -165,6 +189,12 @@ namespace NihongoDeskMemoWpf
         public Func<bool, string> RecordingChanged { get; set; }
         private readonly UnitSelectionControl unitSelection;
         private readonly TextBlock countText;
+        private readonly List<NihongoDeskMemo.PracticePreset> presetDraft;
+        private ComboBox presetBox;
+        private TextBox presetNameBox;
+        private Button deletePresetButton;
+        private int editingPresetIndex = -1;
+        private bool loadingPreset;
 
         public WpfSettingsWindow(
             NihongoDeskMemo.AppConfig appConfig,
@@ -180,6 +210,7 @@ namespace NihongoDeskMemoWpf
             importAction = import;
             libraryAction = library;
             resetAction = reset;
+            presetDraft = NihongoDeskMemo.PracticePresets.Copy(config.PracticePresets);
 
             Body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             Body.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -188,7 +219,7 @@ namespace NihongoDeskMemoWpf
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             int i;
-            for (i = 0; i < 10; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 7 ? GridLength.Auto : new GridLength(41) });
+            for (i = 0; i < 11; i++) form.RowDefinitions.Add(new RowDefinition { Height = i == 7 || i == 8 ? GridLength.Auto : new GridLength(41) });
             Body.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 0, 10) });
 
@@ -214,11 +245,19 @@ namespace NihongoDeskMemoWpf
             AddRow(form, "抽题方向", modeBox, 6);
 
             unitSelection = new UnitSelectionControl(config, database);
-            AddRow(form, "练习单元", unitSelection, 7);
+            AddRow(form, "课程方案", BuildPresetEditor(), 7);
+            AddRow(form, "练习单元", unitSelection, 8);
+            unitSelection.SelectionUpdated += delegate
+            {
+                if (loadingPreset) return;
+                loadingPreset = true;
+                try { presetBox.SelectedIndex = 0; }
+                finally { loadingPreset = false; }
+            };
 
             countText = UiLabel(string.Empty);
             UpdateCount();
-            AddRow(form, "词库", countText, 8);
+            AddRow(form, "词库", countText, 9);
 
             hideHotkeyBox = new HotkeyRecorder(HotkeyGesture.FromConfig(config));
             hideHotkeyBox.RecordingChanged = delegate(bool recording)
@@ -226,7 +265,7 @@ namespace NihongoDeskMemoWpf
                 return RecordingChanged == null ? string.Empty : RecordingChanged(recording);
             };
             Closed += delegate { hideHotkeyBox.EndRecording(); };
-            AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 9);
+            AddRow(form, "全局隐藏快捷键", hideHotkeyBox, 10);
             studyModeBox = UiComboBox();
             studyModeBox.Items.Add("到期复习");
             studyModeBox.Items.Add("浏览（不计评级）");
@@ -262,6 +301,91 @@ namespace NihongoDeskMemoWpf
             box.Foreground = Brushes.White;
             box.VerticalAlignment = VerticalAlignment.Center;
             return box;
+        }
+
+        private UIElement BuildPresetEditor()
+        {
+            StackPanel editor = new StackPanel { Margin = new Thickness(0, 3, 0, 8) };
+            presetBox = UiComboBox();
+            presetBox.ToolTip = "课程方案";
+            editor.Children.Add(presetBox);
+            Grid row = new Grid { Margin = new Thickness(0, 5, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            presetNameBox = UiTextBox();
+            presetNameBox.MaxLength = 60;
+            presetNameBox.ToolTip = "方案名称";
+            row.Children.Add(presetNameBox);
+            Button save = UiButton("保存方案");
+            save.Click += delegate
+            {
+                string error;
+                if (!TrySavePreset(out error)) MessageBox.Show(this, error, "方案未保存");
+            };
+            Grid.SetColumn(save, 1); row.Children.Add(save);
+            deletePresetButton = UiButton("×");
+            deletePresetButton.ToolTip = "删除当前编辑的课程方案";
+            deletePresetButton.Click += delegate { DeletePreset(); };
+            Grid.SetColumn(deletePresetButton, 2); row.Children.Add(deletePresetButton);
+            editor.Children.Add(row);
+            presetBox.SelectionChanged += delegate
+            {
+                if (loadingPreset) return;
+                editingPresetIndex = presetBox.SelectedIndex - 1;
+                deletePresetButton.IsEnabled = editingPresetIndex >= 0;
+                if (editingPresetIndex < 0) { presetNameBox.Text = string.Empty; return; }
+                NihongoDeskMemo.PracticePreset preset = presetDraft[editingPresetIndex];
+                presetNameBox.Text = preset.Name;
+                loadingPreset = true;
+                try { unitSelection.SelectUnits(database, preset.Units); }
+                finally { loadingPreset = false; }
+            };
+            RefreshPresets(-1);
+            return editor;
+        }
+
+        private void RefreshPresets(int selected)
+        {
+            loadingPreset = true;
+            try
+            {
+                presetBox.Items.Clear();
+                presetBox.Items.Add("自定义选择");
+                foreach (NihongoDeskMemo.PracticePreset preset in presetDraft) presetBox.Items.Add(preset.Name);
+                presetBox.SelectedIndex = selected + 1;
+                editingPresetIndex = selected;
+                deletePresetButton.IsEnabled = selected >= 0;
+            }
+            finally { loadingPreset = false; }
+        }
+
+        private bool TrySavePreset(out string error)
+        {
+            error = string.Empty;
+            string name = presetNameBox.Text.Trim();
+            if (name.Length == 0 || name.Length > 60) { error = "请输入 1 至 60 个字符的方案名称。"; return false; }
+            List<string> selected = unitSelection.SelectedUnits();
+            if (!unitSelection.IsAll && selected.Count == 0) { error = "请先选择单元，或勾选全部词库。"; return false; }
+            for (int i = 0; i < presetDraft.Count; i++)
+                if (i != editingPresetIndex && string.Equals(presetDraft[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                { error = "方案名称已存在，请使用其他名称。"; return false; }
+            NihongoDeskMemo.PracticePreset preset = new NihongoDeskMemo.PracticePreset { Name = name,
+                Units = unitSelection.IsAll ? new string[0] : selected.ToArray() };
+            int index = editingPresetIndex;
+            if (index < 0) { index = presetDraft.Count; presetDraft.Add(preset); }
+            else presetDraft[index] = preset;
+            RefreshPresets(index);
+            presetNameBox.Text = name;
+            return true;
+        }
+
+        private void DeletePreset()
+        {
+            if (editingPresetIndex < 0) return;
+            presetDraft.RemoveAt(editingPresetIndex);
+            RefreshPresets(-1);
+            presetNameBox.Text = string.Empty;
         }
 
         private static void AddRow(Grid form, string label, UIElement control, int row)
@@ -301,7 +425,7 @@ namespace NihongoDeskMemoWpf
 
         private void ResetClick(object sender, RoutedEventArgs e)
         {
-            if (MessageBox.Show(this, "确定清空所有词条的复习进度吗？", "确认", MessageBoxButton.OKCancel) == MessageBoxResult.OK && resetAction != null)
+            if (MessageBox.Show(this, "重置所有方向的复习进度？历史评级记录仍会保留。", "确认", MessageBoxButton.OKCancel) == MessageBoxResult.OK && resetAction != null)
             {
                 resetAction();
             }
@@ -346,6 +470,7 @@ namespace NihongoDeskMemoWpf
             config.ReviewMode = Math.Max(0, modeBox.SelectedIndex);
             config.StudyMode = studyModeBox.SelectedIndex == 1 ? 1 : 0;
             PracticeScope.SetUnits(config, unitSelection.IsAll ? new List<string>() : selected);
+            config.PracticePresets = NihongoDeskMemo.PracticePresets.Copy(presetDraft);
             return true;
         }
     }
@@ -436,6 +561,15 @@ namespace NihongoDeskMemoWpf
             StackPanel actions = new StackPanel { Orientation = Orientation.Horizontal };
             Grid.SetColumn(actions, 1);
             footer.Children.Add(actions);
+            Button history = UiButton("复习记录");
+            history.Click += delegate
+            {
+                grid.CommitEdit(DataGridEditingUnit.Row, true);
+                NihongoDeskMemo.WordItem selected = grid.SelectedItem as NihongoDeskMemo.WordItem;
+                if (selected == null) { MessageBox.Show(this, "请先选择一个单词。", "复习记录"); return; }
+                new ReviewHistoryWindow(database, selected) { Owner = this }.ShowDialog();
+            };
+            actions.Children.Add(history);
             Button add = UiButton("新增");
             add.Click += AddClick;
             actions.Children.Add(add);
@@ -450,16 +584,6 @@ namespace NihongoDeskMemoWpf
             Closing += WindowClosing;
             PopulateUnitBox();
             RefreshGrid();
-        }
-
-        private static Style HeaderStyle()
-        {
-            Style style = new Style(typeof(DataGridColumnHeader));
-            style.Setters.Add(new Setter(Control.BackgroundProperty, UiBrush("#FF293748")));
-            style.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
-            style.Setters.Add(new Setter(Control.BorderBrushProperty, UiBrush("#FF526176")));
-            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(7, 6, 7, 6)));
-            return style;
         }
 
         private void AddTextColumn(string property, string header, double width, bool readOnly)
@@ -516,7 +640,7 @@ namespace NihongoDeskMemoWpf
                 NihongoDeskMemo.WordItem item = selected as NihongoDeskMemo.WordItem;
                 if (item != null) item.Unit = unit;
             }
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            if (!SaveDatabase()) return;
             PopulateUnitBox();
             RefreshGrid();
         }
@@ -553,23 +677,27 @@ namespace NihongoDeskMemoWpf
             RefreshGrid();
         }
 
-        private void SaveDatabase()
+        private bool SaveDatabase()
         {
-            grid.CommitEdit(DataGridEditingUnit.Cell, true);
-            grid.CommitEdit(DataGridEditingUnit.Row, true);
+            if (!grid.CommitEdit(DataGridEditingUnit.Cell, true) || !grid.CommitEdit(DataGridEditingUnit.Row, true)) return false;
             int i;
             for (i = database.Words.Count - 1; i >= 0; i--)
             {
                 NihongoDeskMemo.WordItem item = database.Words[i];
                 if (item == null || NihongoDeskMemo.Storage.SafeTrim(item.Japanese).Length == 0 ||
-                    NihongoDeskMemo.Storage.SafeTrim(item.Chinese).Length == 0) database.Words.RemoveAt(i);
+                    NihongoDeskMemo.Storage.SafeTrim(item.Chinese).Length == 0)
+                {
+                    MessageBox.Show(this, "第 " + (i + 1) + " 条缺少单词或意思，请补全或明确删除。", "词库未保存");
+                    return false;
+                }
             }
-            NihongoDeskMemo.Storage.SaveDatabase(database);
+            try { NihongoDeskMemo.Storage.SaveDatabase(database); return true; }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "词库未保存"); return false; }
         }
 
         private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            SaveDatabase();
+            e.Cancel = !SaveDatabase();
         }
     }
 }
