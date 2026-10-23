@@ -32,7 +32,8 @@ remain distinct steps. See V0.5-SPEC.md.
 - [x] Japanese pronunciation with manual playback by default and speech rate control.
 - [x] Editable/importable examples and source information; schema 2 backups.
 - [x] Daily rated-card counts, due counts and weak-word views.
-- [ ] Full desktop verification, PR CI and authorized release publication.
+- [x] Full desktop, speech, compact UI and 2142-entry source verification.
+- [ ] PR CI and authorized release publication. See V0.6-VALIDATION.md.
 - Evaluate an established FSRS implementation after review history is available;
   keep the current scheduler if compatibility or evidence is insufficient.
 
