@@ -593,8 +593,10 @@ namespace NihongoDeskMemoWpf
                 if (!SaveDatabase()) return;
                 Microsoft.Win32.SaveFileDialog dialog = new Microsoft.Win32.SaveFileDialog { Title = "导出完整词表（不含复习进度）", Filter = "XML 词表|*.xml", FileName = "vocabulary.xml" };
                 if (dialog.ShowDialog(this) != true) return;
-                if (string.Equals(System.IO.Path.GetFullPath(dialog.FileName), System.IO.Path.GetFullPath(NihongoDeskMemo.Storage.DatabasePath), StringComparison.OrdinalIgnoreCase))
-                { MessageBox.Show(this, "请选择其他文件名，不能覆盖正在使用的词库。", "导出取消"); return; }
+                string destination = System.IO.Path.GetFullPath(dialog.FileName);
+                if (string.Equals(destination, System.IO.Path.GetFullPath(NihongoDeskMemo.Storage.DatabasePath), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(destination, System.IO.Path.GetFullPath(NihongoDeskMemo.Storage.ConfigPath), StringComparison.OrdinalIgnoreCase))
+                { MessageBox.Show(this, "请选择其他文件名，不能覆盖正在使用的词库或设置。", "导出取消"); return; }
                 try { NihongoDeskMemo.StructuredWordImporter.ExportFile(dialog.FileName, database); }
                 catch (Exception ex) { MessageBox.Show(this, ex.Message, "导出失败"); }
             };

@@ -51,11 +51,11 @@ namespace NihongoDeskMemo
         {
             Dictionary<string, WordItem> existingIds = new Dictionary<string, WordItem>(StringComparer.Ordinal);
             foreach (WordItem item in database.Words)
-                if (!string.IsNullOrEmpty(item.SourceId))
                 {
-                    if (updateExisting && existingIds.ContainsKey(item.SourceId))
-                        throw new InvalidDataException("本地词库来源编号重复，无法确定更新对象：" + item.SourceId);
-                    existingIds[item.SourceId] = item;
+                    string key = SourceKey(item);
+                    if (updateExisting && existingIds.ContainsKey(key))
+                        throw new InvalidDataException("本地词库来源编号重复，无法确定更新对象：" + key);
+                    existingIds[key] = item;
                 }
             ImportResult result = new ImportResult();
             foreach (WordItem item in incoming.Words)
@@ -85,6 +85,9 @@ namespace NihongoDeskMemo
             to.ExampleJapanese = from.ExampleJapanese; to.ExampleChinese = from.ExampleChinese; to.SourceLabel = from.SourceLabel;
         }
 
+        internal static string SourceKey(WordItem word)
+        { return string.IsNullOrWhiteSpace(word.SourceId) ? "local:" + word.WordId : word.SourceId; }
+
         public static void ExportFile(string path, WordDatabase database)
         {
             WordDatabase exported = new WordDatabase { SchemaVersion = ReviewData.CurrentSchemaVersion };
@@ -92,7 +95,7 @@ namespace NihongoDeskMemo
             foreach (WordItem word in database.Words)
             {
                 WordItem copy = new WordItem(); CopyContent(word, copy);
-                if (string.IsNullOrWhiteSpace(copy.SourceId)) copy.SourceId = "local:" + word.WordId;
+                copy.SourceId = SourceKey(word);
                 if (!ids.Add(copy.SourceId)) throw new InvalidDataException("来源编号重复，无法无歧义导出：" + copy.SourceId);
                 exported.Words.Add(copy);
             }

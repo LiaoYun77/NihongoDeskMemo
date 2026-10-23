@@ -52,6 +52,8 @@ namespace NihongoDeskMemoWpf
                 Check(roundtrip.Words.Count == 2 && roundtrip.Words[1].ExampleJapanese == "本を読みます。" &&
                     roundtrip.Words[0].ReviewCount == 0 && roundtrip.Words[0].SourceText == word.SourceText,
                     "export includes all content, assigns missing source identity and excludes review progress");
+                Check(!ImportPreview.Prepare(exported, target, false).CanApply && target.Words.Count == 2,
+                    "reimporting own export does not duplicate manually created words");
                 target.Words.Add(new WordItem { Japanese = "duplicate", Chinese = "重复", SourceId = local.SourceId });
                 bool rejected = false;
                 try { ImportPreview.Prepare(path, target, true); } catch (InvalidDataException) { rejected = true; }

@@ -40,7 +40,7 @@ namespace NihongoDeskMemo
             {
                 WordDatabase incoming = StructuredWordImporter.ReadFile(path);
                 HashSet<string> existing = new HashSet<string>(StringComparer.Ordinal);
-                foreach (WordItem word in database.Words) if (!string.IsNullOrEmpty(word.SourceId)) existing.Add(word.SourceId);
+                foreach (WordItem word in database.Words) existing.Add(StructuredWordImporter.SourceKey(word));
                 int line = 0;
                 foreach (WordItem word in incoming.Words)
                     plan.AddRow(++line, word, existing.Contains(word.SourceId) ? (updateExisting ? "更新词条内容（保留进度）" : "已有来源（跳过）") : "新增", word.SourceText);
